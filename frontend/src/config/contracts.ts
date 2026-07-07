@@ -57,6 +57,8 @@ export const marketAbi = parseAbi([
   "function getPosition(address owner, bytes32 marketId, bool isLong) view returns ((uint256 sizeUsd, uint256 sizeTokens, uint256 collateralUsd, uint256 entryBorrowX18))",
   "function getPositionPnl(address owner, bytes32 marketId, bool isLong) view returns (int256)",
   "function getMarketState(bytes32 marketId) view returns (uint256 longSizeUsd, uint256 shortSizeUsd, uint256 cumBorrowLongX18, uint256 cumBorrowShortX18, uint256 lastAccrual)",
+  "function positionFeeBps() view returns (uint256)",
+  "function marketConfig(bytes32 marketId) view returns (bool listed, uint256 maxLeverageX, uint256 maxOiUsd, uint256 borrowRateFactorBps)",
 ]);
 
 export const routerAbi = parseAbi([

@@ -147,8 +147,8 @@ describe("XKub Perp", () => {
       await market.connect(trader).decreasePosition(BTC, true, usd(10_000));
       const got = (await kusdt.balanceOf(trader.address)) - before;
 
-      // collateral 990 (after 10 open fee) + 1000 pnl - 10 close fee - tiny borrow fee
-      expect(got).to.be.closeTo(usd(1_980), usd(2));
+      // collateral 997 (after 3 open fee) + 1000 pnl - 3 close fee - tiny borrow fee
+      expect(got).to.be.closeTo(usd(1_994), usd(2));
       expect(await market.totalOpenInterestUsd()).to.equal(0);
     });
 
@@ -159,8 +159,8 @@ describe("XKub Perp", () => {
 
       await oracle.forceSetPrice(BTC, usd(47_500)); // -5% → -500 USD
       await market.connect(trader).decreasePosition(BTC, true, usd(10_000));
-      // pool gained ~500 loss + ~20 fees
-      expect(await pool.poolValueUsd()).to.be.closeTo(poolBefore + usd(520), usd(2));
+      // pool gained ~500 loss + ~6 fees
+      expect(await pool.poolValueUsd()).to.be.closeTo(poolBefore + usd(506), usd(2));
     });
 
     it("short profits when price falls", async () => {
@@ -171,7 +171,7 @@ describe("XKub Perp", () => {
       const before = await kusdt.balanceOf(trader.address);
       await market.connect(trader).decreasePosition(BTC, false, usd(10_000));
       const got = (await kusdt.balanceOf(trader.address)) - before;
-      expect(got).to.be.closeTo(usd(1_980), usd(2));
+      expect(got).to.be.closeTo(usd(1_994), usd(2));
     });
 
     it("partial close realizes proportional pnl and releases collateral", async () => {
@@ -182,25 +182,25 @@ describe("XKub Perp", () => {
       await market.connect(trader).decreasePosition(BTC, true, usd(5_000));
       const p = await market.getPosition(trader.address, BTC, true);
       expect(p.sizeUsd).to.equal(usd(5_000));
-      // half of (2000 - 10 open fee) stays
-      expect(p.collateralUsd).to.be.closeTo(usd(995), usd(1));
+      // half of (2000 - 3 open fee) stays
+      expect(p.collateralUsd).to.be.closeTo(usd(999), usd(1));
     });
 
     it("profit capped at maxProfitBps of collateral", async () => {
       const { market, trader, oracle, admin, kusdt } = await loadFixture(fundedFixture);
       // cap profit at 100% of collateral
-      await market.connect(admin).setGlobalParams(10, 100, usd(5), 10000, usd(10), 300);
+      await market.connect(admin).setGlobalParams(3, 100, usd(5), 10000, usd(10), 300);
       await market.connect(trader).increasePosition(BTC, true, usd(1_000), usd(10_000));
 
       await oracle.forceSetPrice(BTC, usd(75_000)); // +50% (admin force)
       const pnlRaw = await market.getPositionPnl(trader.address, BTC, true);
       expect(pnlRaw).to.equal(usd(5_000)); // uncapped view
 
-      // capped at settlement: payout ≈ 990 collateral + 990 capped pnl - 10 fee
+      // capped at settlement: payout ≈ 997 collateral + 997 capped pnl - 3 fee
       const before = await kusdt.balanceOf(trader.address);
       await market.connect(trader).decreasePosition(BTC, true, usd(10_000));
       const after = await kusdt.balanceOf(trader.address);
-      expect(after - before).to.be.closeTo(usd(1_970), usd(2));
+      expect(after - before).to.be.closeTo(usd(1_991), usd(2));
     });
 
     it("enforces leverage, OI cap, min collateral", async () => {
@@ -226,13 +226,13 @@ describe("XKub Perp", () => {
 
       // rate/h = 10bps * (100k OI / ~100k pool) ≈ 0.1%/h → ~2.4%/day on 100k size ≈ 2400 USD
       const p = await market.getPosition(trader.address, BTC, true);
-      const pending = usd(10_000) - usd(100) - p.collateralUsd; // still 0 until touch
+      const pending = usd(10_000) - usd(30) - p.collateralUsd; // still 0 until touch
       expect(pending).to.equal(0n);
 
       // touch settles it
       await market.connect(trader).increasePosition(BTC, true, usd(1_000), 0);
       const p2 = await market.getPosition(trader.address, BTC, true);
-      const fee = usd(10_000) - usd(100) + usd(1_000) - p2.collateralUsd;
+      const fee = usd(10_000) - usd(30) + usd(1_000) - p2.collateralUsd;
       expect(fee).to.be.closeTo(usd(2_400), usd(150));
     });
   });
@@ -265,15 +265,15 @@ describe("XKub Perp", () => {
     it("refunds residual equity to trader above keeper fee", async () => {
       const { market, trader, liquidator, oracle, kusdt } = await loadFixture(fundedFixture);
       await market.connect(trader).increasePosition(BTC, true, usd(1_000), usd(10_000));
-      // land equity just under maintenance (100): -8.95% ≈ pnl -895
+      // land equity just under maintenance (100): -9% ≈ pnl -900
       await oracle.forceSetPrice(BTC, usd(47_500));
-      await oracle.forceSetPrice(BTC, usd(45_525));
+      await oracle.forceSetPrice(BTC, usd(45_500));
 
       const before = await kusdt.balanceOf(trader.address);
       await market.connect(liquidator).liquidate(trader.address, BTC, true);
       const refund = (await kusdt.balanceOf(trader.address)) - before;
-      // equity ≈ 990 - 895 = 95, minus 5 keeper fee → ~90 back to trader
-      expect(refund).to.be.closeTo(usd(90), usd(3));
+      // equity ≈ 997 - 900 = 97, minus 5 keeper fee → ~92 back to trader
+      expect(refund).to.be.closeTo(usd(92), usd(3));
     });
   });
 
@@ -311,7 +311,7 @@ describe("XKub Perp", () => {
       await router.connect(keeper).executeRequest(1);
 
       // payout went to the trader, not the keeper/router
-      expect((await kusdt.balanceOf(trader.address)) - before).to.be.closeTo(usd(1_980), usd(2));
+      expect((await kusdt.balanceOf(trader.address)) - before).to.be.closeTo(usd(1_994), usd(2));
       expect((await market.getPosition(trader.address, BTC, true)).sizeUsd).to.equal(0n);
     });
 
@@ -409,11 +409,11 @@ describe("XKub Perp", () => {
       await market.connect(trader).increasePosition(BTC, true, usd(5_000), usd(50_000));
 
       await oracle.forceSetPrice(BTC, usd(52_500)); // traders +5% of 50k = +2500
-      expect(await pool.poolValueUsd()).to.be.closeTo(v0 - usd(2_450), usd(60));
+      expect(await pool.poolValueUsd()).to.be.closeTo(v0 - usd(2_485), usd(60));
 
       await oracle.forceSetPrice(BTC, usd(50_000));
       await oracle.forceSetPrice(BTC, usd(47_500)); // traders -2500
-      expect(await pool.poolValueUsd()).to.be.closeTo(v0 + usd(2_550), usd(60));
+      expect(await pool.poolValueUsd()).to.be.closeTo(v0 + usd(2_515), usd(60));
     });
   });
 });

@@ -9,7 +9,7 @@ import {
 } from "@/config/contracts";
 import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
-import { useOraclePrice } from "./MarketBar";
+import { useMarketFees, useOraclePrice } from "./MarketBar";
 
 const SLIPPAGE_OPTS = [
   { label: "0.3%", bps: 30n },
@@ -23,6 +23,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
   const client = usePublicClient();
   const { writeContractAsync } = useWriteContract();
   const price = useOraclePrice(symbol);
+  const fees = useMarketFees(symbol);
   const oneClick = useOneClick();
 
   const [isLong, setIsLong] = useState(true);
@@ -201,7 +202,16 @@ export default function TradePanel({ symbol }: { symbol: string }) {
           <Row k="Position size" v={sizeUsd ? `${fmtNum(sizeUsd)} USD` : "—"} />
           <Row k="Entry (oracle)" v={price > 0n ? `$${fmtPrice(price)}` : "—"} />
           <Row k="Est. liq. price" v={liqPrice ? `$${fmtNum(liqPrice, liqPrice >= 100 ? 1 : 4)}` : "—"} />
-          <Row k="Open fee (0.1%)" v={sizeUsd ? `${(sizeUsd * 0.001).toFixed(2)} KUSDT` : "—"} />
+          <Row
+            k={`Open fee${fees.feeBps !== null ? ` (${(fees.feeBps / 100).toFixed(2)}%)` : ""}`}
+            v={sizeUsd && fees.feeBps !== null
+              ? `${(sizeUsd * fees.feeBps / 10000).toFixed(2)} KUSDT` : "—"}
+          />
+          <Row
+            k="Borrow rate (current /h)"
+            v={(isLong ? fees.longRatePerHour : fees.shortRatePerHour) !== null
+              ? `${(isLong ? fees.longRatePerHour : fees.shortRatePerHour)!.toFixed(4)}%` : "—"}
+          />
           <Row k="Execution fee" v={minExecFee !== undefined ? `${formatEther(minExecFee)} KUB` : "—"} />
         </div>
 

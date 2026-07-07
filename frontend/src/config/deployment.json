@@ -5,11 +5,11 @@
   "explorer": "",
   "kusdtDecimals": 18,
   "addresses": {
-    "KUSDT": "0x720472c8ce72c2A2D711333e064ABD3E6BbEAdd3",
-    "XKubPriceOracle": "0xe8D2A1E88c91DCd5433208d4152Cc4F399a7e91d",
-    "XKubPerpPool": "0x5067457698Fd6Fa1C6964e416b3f42713513B3dD",
-    "XKubPerpMarket": "0x18E317A7D70d8fBf8e6E893616b52390EbBdb629",
-    "XKubPerpRouter": "0x4b6aB5F819A515382B0dEB6935D793817bB4af28"
+    "KUSDT": "0xcf23CE2ffa1DDd9Cc2b445aE6778c4DBD605a1A0",
+    "XKubPriceOracle": "0x427EE58a6c574032085AEB90Dd05dEea6F054930",
+    "XKubPerpPool": "0x2963ff0196a901ec3F56d7531e7C4Ce8F226462B",
+    "XKubPerpMarket": "0xba840136E489cB5eCf9D9988421F3a9F45e0c341",
+    "XKubPerpRouter": "0xA13d4a67745D4Ed129AF590c495897eE2C7F8Cfc"
   },
   "markets": [
     {

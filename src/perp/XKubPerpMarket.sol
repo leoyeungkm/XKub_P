@@ -99,7 +99,7 @@ contract XKubPerpMarket is ReentrancyGuard {
     mapping(bytes32 => uint256) internal keyIndexPlusOne; // 0 = not tracked
 
     // Global risk params
-    uint256 public positionFeeBps      = 10;     // 0.1% of size, open & close
+    uint256 public positionFeeBps      = 3;      // 0.03% of size, open & close
     uint256 public maintenanceMarginBps = 100;   // 1% of size
     uint256 public liquidationFeeUsd   = 5e18;   // keeper reward
     uint256 public maxProfitBps        = 90000;  // 900% of collateral

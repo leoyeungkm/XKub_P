@@ -405,6 +405,7 @@ contract XKubPerpMarket is ReentrancyGuard {
         int256 equity = int256(p.collateralUsd) + pnlUsd;
         require(equity <= int256((p.sizeUsd * maintenanceMarginBps) / 10000), "not liquidatable");
 
+        uint256 sizeSnapshot = p.sizeUsd;
         uint256 collateralUsd = p.collateralUsd;
         uint256 keeperUsd = liquidationFeeUsd > collateralUsd ? collateralUsd : liquidationFeeUsd;
         uint256 remainingUsd = equity > 0 ? uint256(equity) : 0;
@@ -422,6 +423,14 @@ contract XKubPerpMarket is ReentrancyGuard {
         _sendToPool(toPoolUsd + borrowFeeUsd);
         if (keeperUsd > 0) kusdt.safeTransfer(msg.sender, keeperUsd / scaler);
         if (traderRefundUsd > 0) kusdt.safeTransfer(owner, traderRefundUsd / scaler);
+
+        // Charge the same position fee a close would, so liquidating isn't a
+        // fee-free exit. Drawn from the pool's take (capped by it), then split
+        // to protocol/referral like any other fee — closes the fee asymmetry
+        // that a straddle's losing side could otherwise dodge.
+        uint256 liqFeeUsd = (sizeSnapshot * positionFeeBps) / 10000;
+        if (liqFeeUsd > toPoolUsd) liqFeeUsd = toPoolUsd;
+        _distributeFees(owner, liqFeeUsd);
 
         emit PositionLiquidated(owner, marketId, isLong, msg.sender, price, keeperUsd, traderRefundUsd, toPoolUsd);
     }

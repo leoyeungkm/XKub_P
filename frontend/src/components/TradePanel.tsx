@@ -9,6 +9,7 @@ import {
 } from "@/config/contracts";
 import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
+import { gaslessAvailable, submitGaslessOrder } from "@/lib/gasless";
 import { useAccountSummary } from "@/lib/portfolio";
 import { useMarketFees, useMyFee, useOraclePrice } from "./MarketBar";
 
@@ -124,12 +125,28 @@ export default function TradePanel({ symbol }: { symbol: string }) {
 
       const fee = minExecFee ?? 0n;
 
-      // 1-click path: agent signs silently, collateral from the router balance
+      // Gasless path: agent signs, relayer submits & pays gas (no KUB needed)
+      if (oneClick.active && gaslessAvailable() && oneClick.balance >= collateralTokens) {
+        try {
+          await submitGaslessOrder({
+            owner: address, symbol, isLong, isIncrease: true,
+            collateralTokens, sizeDeltaUsd: sizeUsd18, acceptablePrice: acceptable, client,
+          });
+          toast.success("Order submitted (gasless) — keeper executes at fresh price");
+          setAmount("");
+          oneClick.refetch();
+          return;
+        } catch (e) {
+          toast("Relayer unavailable — falling back to on-chain 1-click");
+        }
+      }
+
+      // 1-click path: agent signs & submits on-chain, collateral from the balance
       if (oneClick.active) {
         if (oneClick.balance < collateralTokens) {
           toast("1-click balance too low — order goes via wallet instead");
         } else if (oneClick.agentGas < fee * 2n) {
-          toast("Agent gas low — top it up in the 1-Click panel. Using wallet.");
+          toast("Agent gas low — top it up. Using wallet.");
         } else {
           const agents = getAgentClients(address)!;
           const hash = await agents.wallet.writeContract({

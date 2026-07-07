@@ -109,7 +109,10 @@ export const routerAbi = parseAbi([
   "function cancelTrigger(bytes32 marketId, bool isLong)",
   "function cancelTriggerFor(address owner, bytes32 marketId, bool isLong)",
   "function triggers(bytes32 key) view returns (uint256 tpPrice, uint256 slPrice, uint256 executionFee, bool active)",
+  "function orderNonce(address owner) view returns (uint256)",
 ]);
+
+export const RELAYER_URL = (CFG as { relayerUrl?: string }).relayerUrl ?? "";
 
 // keccak256(abi.encodePacked(owner, marketId, isLong)) — matches the router
 export const triggerKey = (owner: `0x${string}`, symbol: string, isLong: boolean): Hex => {

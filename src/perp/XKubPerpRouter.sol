@@ -3,6 +3,8 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "./IXKubPerp.sol";
 
 /*//////////////////////////////////////////////////////////////
@@ -61,8 +63,32 @@ interface IXKubPerpMarketRouted {
         external view returns (uint256 sizeUsd, uint256 sizeTokens, uint256 collateralUsd, uint256 entryBorrowX18);
 }
 
-contract XKubPerpRouter is ReentrancyGuard {
+contract XKubPerpRouter is ReentrancyGuard, EIP712 {
     using SafeERC20 for IERC20;
+
+    /*//////////////////////////////////////////////////////////////
+        GASLESS TRADING (signed orders)
+    //////////////////////////////////////////////////////////////
+      The agent key SIGNS an order off-chain (no gas); a platform relayer
+      (a keeper) submits it and pays the gas. The user never holds KUB — the
+      relayer only ever pays to execute a valid, agent-signed trade, so there
+      is nothing a user can drain. Front-run-safe: the keeper executes at the
+      price it just posted; acceptablePrice bounds the fill.               */
+    struct Order {
+        address owner;
+        bytes32 marketId;
+        bool    isLong;
+        bool    isIncrease;
+        uint256 collateralTokens; // increase: drawn from owner's trading balance
+        uint256 sizeDeltaUsd;
+        uint256 acceptablePrice;  // 0 = no bound
+        uint256 nonce;
+        uint256 deadline;
+    }
+    bytes32 public constant ORDER_TYPEHASH = keccak256(
+        "Order(address owner,bytes32 marketId,bool isLong,bool isIncrease,uint256 collateralTokens,uint256 sizeDeltaUsd,uint256 acceptablePrice,uint256 nonce,uint256 deadline)"
+    );
+    mapping(address => uint256) public orderNonce;   // owner → next expected nonce
 
     struct Request {
         address owner;
@@ -128,6 +154,7 @@ contract XKubPerpRouter is ReentrancyGuard {
     event TriggerSet(address indexed owner, bytes32 indexed marketId, bool isLong, uint256 tpPrice, uint256 slPrice);
     event TriggerCancelled(address indexed owner, bytes32 indexed marketId, bool isLong, address indexed by);
     event TriggerExecuted(address indexed owner, bytes32 indexed marketId, bool isLong, address keeper, uint256 price, bool tp);
+    event SignedOrderExecuted(address indexed owner, bytes32 indexed marketId, bool isLong, bool isIncrease, uint256 nonce, uint256 price);
 
     modifier onlyAdmin() {
         require(msg.sender == admin, "!admin");
@@ -139,7 +166,9 @@ contract XKubPerpRouter is ReentrancyGuard {
         _;
     }
 
-    constructor(address _kusdt, address _market, address _oracle, address _admin) {
+    constructor(address _kusdt, address _market, address _oracle, address _admin)
+        EIP712("XKubPerp", "1")
+    {
         require(_kusdt != address(0) && _market != address(0) && _oracle != address(0), "!addr");
         kusdt  = IERC20(_kusdt);
         market = IXKubPerpMarketRouted(_market);
@@ -374,6 +403,44 @@ contract XKubPerpRouter is ReentrancyGuard {
         }
         _payNative(msg.sender, fee);
         emit TriggerExecuted(owner, marketId, isLong, msg.sender, price, tpHit);
+    }
+
+    // ─── Gasless: agent-signed orders ──────────────────────────────────────────
+
+    /// @notice EIP-712 digest for an order (frontend signs this with the agent key).
+    function hashOrder(Order calldata o) public view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(
+            ORDER_TYPEHASH, o.owner, o.marketId, o.isLong, o.isIncrease,
+            o.collateralTokens, o.sizeDeltaUsd, o.acceptablePrice, o.nonce, o.deadline
+        )));
+    }
+
+    /// @notice Relayer (keeper) submits an agent-signed order and pays the gas.
+    ///         Executes at the fresh oracle price. Collateral for increases comes
+    ///         from the owner's trading balance; close payouts return to it.
+    function executeSignedOrder(Order calldata o, bytes calldata sig) external nonReentrant onlyKeeper {
+        require(block.timestamp <= o.deadline, "expired");
+        require(o.nonce == orderNonce[o.owner], "bad nonce");
+        address signer = ECDSA.recover(hashOrder(o), sig);
+        require(isAgent[o.owner][signer], "!agent sig");
+        orderNonce[o.owner]++;
+
+        uint256 price = oracle.getPrice(o.marketId, market.maxPriceAge());
+        if (o.acceptablePrice != 0) {
+            bool ok = o.isIncrease
+                ? (o.isLong ? price <= o.acceptablePrice : price >= o.acceptablePrice)
+                : (o.isLong ? price >= o.acceptablePrice : price <= o.acceptablePrice);
+            require(ok, "price bound");
+        }
+
+        if (o.isIncrease) {
+            if (o.collateralTokens > 0) collateralBalance[o.owner] -= o.collateralTokens; // trading balance
+            market.increasePositionFor(o.owner, o.marketId, o.isLong, o.collateralTokens, o.sizeDeltaUsd);
+        } else {
+            uint256 payout = market.decreasePositionForTo(o.owner, o.marketId, o.isLong, o.sizeDeltaUsd, address(this));
+            collateralBalance[o.owner] += payout;
+        }
+        emit SignedOrderExecuted(o.owner, o.marketId, o.isLong, o.isIncrease, o.nonce, price);
     }
 
     // ─── Keeper: execute ───────────────────────────────────────────────────────

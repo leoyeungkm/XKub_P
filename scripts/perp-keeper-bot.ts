@@ -21,11 +21,13 @@
  *   oracle and the router via setKeeper().
  */
 import { ethers, network } from "hardhat";
+import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
 
 const E18 = 10n ** 18n;
 const INTERVAL_MS = Number(process.env.KEEPER_INTERVAL_MS ?? "15000");
+const RELAYER_PORT = Number(process.env.RELAYER_PORT ?? "8787");
 
 const MARKETS = ["BTC", "ETH", "KUB"] as const;
 type Sym = (typeof MARKETS)[number];
@@ -156,6 +158,51 @@ async function liquidateUnderwater(market: any) {
   }
 }
 
+// ─── Gasless relayer (HTTP) ────────────────────────────────────────────────────
+// Accepts agent-signed orders from the frontend and submits them on-chain,
+// paying the gas. The trader never needs KUB. CORS-open for the dapp.
+function startRelayer(router: any) {
+  const submitted = new Set<string>(); // simple in-flight/replay guard
+  const server = http.createServer(async (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Headers", "content-type");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
+    if (req.method !== "POST" || !req.url?.startsWith("/order")) { res.writeHead(404); return res.end(); }
+
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", async () => {
+      try {
+        const { order, sig } = JSON.parse(body);
+        const o = {
+          owner: order.owner, marketId: order.marketId, isLong: order.isLong, isIncrease: order.isIncrease,
+          collateralTokens: BigInt(order.collateralTokens), sizeDeltaUsd: BigInt(order.sizeDeltaUsd),
+          acceptablePrice: BigInt(order.acceptablePrice), nonce: BigInt(order.nonce), deadline: BigInt(order.deadline),
+        };
+        const key = `${o.owner}-${o.nonce}`;
+        if (submitted.has(key)) { res.writeHead(409); return res.end(JSON.stringify({ error: "duplicate" })); }
+        submitted.add(key); // in-flight guard; the on-chain nonce is the real replay protection
+        try {
+          const tx = await router.executeSignedOrder(o, sig);
+          const rcpt = await tx.wait();
+          console.log(`[${now()}] relayed ${o.isIncrease ? "open" : "close"} for ${o.owner} #${o.nonce}`);
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: true, txHash: rcpt.hash }));
+        } catch (err) {
+          submitted.delete(key); // failed → allow retry
+          throw err;
+        }
+      } catch (e: any) {
+        console.error(`[${now()}] relay failed: ${e.shortMessage ?? e.message ?? e}`);
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: e.shortMessage ?? e.message ?? String(e) }));
+      }
+    });
+  });
+  server.listen(RELAYER_PORT, () => console.log(`Gasless relayer on http://localhost:${RELAYER_PORT}/order`));
+}
+
 // ─── main loop ───────────────────────────────────────────────────────────────
 
 async function main() {
@@ -172,6 +219,8 @@ async function main() {
 
   // Safety margin below the on-chain cap (race with a second keeper)
   const maxDeviationBps = ((await oracle.maxDeviationBps()) * 9n) / 10n;
+
+  startRelayer(router); // gasless: accept agent-signed orders over HTTP
 
   // eslint-disable-next-line no-constant-condition
   while (true) {

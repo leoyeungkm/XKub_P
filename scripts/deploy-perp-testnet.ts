@@ -222,6 +222,8 @@ async function main() {
     kusdtDecimals,
     addresses: out.addresses,
     multicall3,
+    // Gasless relayer endpoint (keeper bot). Override per environment.
+    relayerUrl: process.env.RELAYER_URL ?? "http://localhost:8787/order",
     markets: markets.map(m => ({ symbol: m.symbol, maxLeverageX: m.maxLeverageX })),
     // VIP fee tiers (discount in bps of the position fee, volume in USD) — UI
     feeTiers: [

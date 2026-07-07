@@ -8,6 +8,7 @@ import toast from "react-hot-toast";
 import { ADDR, b32, parseB32, routerAbi, triggerKey } from "@/config/contracts";
 import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
+import { gaslessAvailable, submitGaslessOrder } from "@/lib/gasless";
 import { usePositions, useHistory, type PositionRow, type HistoryItem } from "@/lib/portfolio";
 import TpSlModal from "./TpSlModal";
 
@@ -33,6 +34,17 @@ export default function ActivityPanel() {
     try {
       const fee = minExecFee ?? 0n;
       const acceptable = p.mark > 0n ? (p.isLong ? p.mark - p.mark / 100n : p.mark + p.mark / 100n) : 0n;
+      // Gasless close: agent signs, relayer submits & pays gas
+      if (oneClick.active && gaslessAvailable()) {
+        try {
+          await submitGaslessOrder({
+            owner: address, symbol: p.symbol, isLong: p.isLong, isIncrease: false,
+            collateralTokens: 0n, sizeDeltaUsd: p.sizeUsd, acceptablePrice: acceptable, client,
+          });
+          toast.success("Close submitted (gasless)");
+          return;
+        } catch { toast("Relayer unavailable — using on-chain 1-click"); }
+      }
       if (oneClick.active && oneClick.agentGas >= fee * 2n) {
         const agents = getAgentClients(address)!;
         const hash = await agents.wallet.writeContract({

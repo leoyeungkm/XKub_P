@@ -194,7 +194,13 @@ function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[
   return (
     <div className="overflow-x-auto">
       {tpsl && <TpSlModal pos={tpsl} onClose={() => setTpsl(null)} />}
-      <table className="w-full min-w-[900px] text-[12.5px]">
+      <table className="w-full min-w-[1160px] table-fixed text-[12.5px]">
+        {/* Fixed column widths so live price/PnL updates never re-flow the row. */}
+        <colgroup>
+          {[92, 80, 116, 112, 92, 92, 116, 150, 104, 100, 96].map((w, i) => (
+            <col key={i} style={{ width: w }} />
+          ))}
+        </colgroup>
         <thead>
           <tr className="eyebrow text-left">
             {HEAD.map((h) => <th key={h} className="whitespace-nowrap border-b border-line px-3 py-2 font-normal">{h}</th>)}

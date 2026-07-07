@@ -51,6 +51,7 @@ import "./IXKubPerp.sol";
 interface IXKubPerpMarketRouted {
     function increasePositionFor(address owner, bytes32 marketId, bool isLong, uint256 collateralTokens, uint256 sizeDeltaUsd) external;
     function decreasePositionFor(address owner, bytes32 marketId, bool isLong, uint256 sizeDeltaUsd) external;
+    function decreasePositionForTo(address owner, bytes32 marketId, bool isLong, uint256 sizeDeltaUsd, address payoutTo) external returns (uint256 payoutTokens);
     function maxPriceAge() external view returns (uint256);
     function getPosition(address owner, bytes32 marketId, bool isLong)
         external view returns (uint256 sizeUsd, uint256 sizeTokens, uint256 collateralUsd, uint256 entryBorrowX18);
@@ -71,6 +72,7 @@ contract XKubPerpRouter is ReentrancyGuard {
         uint64  createdAt;
         uint8   status;            // 0 pending, 1 executed, 2 cancelled
         bool    fromBalance;       // collateral drawn from (and refunded to) the owner's router balance
+        bool    payoutToBalance;   // close payout credited to the router balance (1-click) vs owner's wallet
     }
 
     uint8 constant STATUS_PENDING   = 0;
@@ -103,6 +105,7 @@ contract XKubPerpRouter is ReentrancyGuard {
         uint256 slPrice;       // stop-loss trigger
         uint256 executionFee;  // native KUB for the executing keeper
         bool    active;
+        bool    payoutToBalance; // close payout to trading balance (agent) vs wallet
     }
     mapping(bytes32 => Trigger) public triggers; // key = keccak(owner, marketId, isLong)
 
@@ -157,7 +160,7 @@ contract XKubPerpRouter is ReentrancyGuard {
         if (collateralTokens > 0) {
             kusdt.safeTransferFrom(msg.sender, address(this), collateralTokens);
         }
-        id = _push(msg.sender, marketId, isLong, true, collateralTokens, sizeDeltaUsd, acceptablePrice, false);
+        id = _push(msg.sender, marketId, isLong, true, collateralTokens, sizeDeltaUsd, acceptablePrice, false, false);
     }
 
     /// @notice Queue a close/decrease.
@@ -170,7 +173,7 @@ contract XKubPerpRouter is ReentrancyGuard {
     ) external payable nonReentrant returns (uint256 id) {
         require(msg.value >= minExecutionFee, "fee too low");
         require(sizeDeltaUsd > 0, "empty");
-        id = _push(msg.sender, marketId, isLong, false, 0, sizeDeltaUsd, acceptablePrice, false);
+        id = _push(msg.sender, marketId, isLong, false, 0, sizeDeltaUsd, acceptablePrice, false, false);
     }
 
     // ─── One-click trading: balance + agents ───────────────────────────────────
@@ -215,11 +218,11 @@ contract XKubPerpRouter is ReentrancyGuard {
         if (collateralTokens > 0) {
             collateralBalance[owner] -= collateralTokens; // reverts on underflow
         }
-        id = _push(owner, marketId, isLong, true, collateralTokens, sizeDeltaUsd, acceptablePrice, true);
+        id = _push(owner, marketId, isLong, true, collateralTokens, sizeDeltaUsd, acceptablePrice, true, false);
     }
 
-    /// @notice Agent entry: close/decrease for `owner`. Payout goes to the
-    ///         owner's wallet (enforced by the market).
+    /// @notice Agent entry: close/decrease for `owner`. Payout returns to the
+    ///         owner's trading balance (1-click), not their wallet.
     function createDecreaseRequestFor(
         address owner,
         bytes32 marketId,
@@ -230,12 +233,12 @@ contract XKubPerpRouter is ReentrancyGuard {
         require(isAgent[owner][msg.sender], "!agent");
         require(msg.value >= minExecutionFee, "fee too low");
         require(sizeDeltaUsd > 0, "empty");
-        id = _push(owner, marketId, isLong, false, 0, sizeDeltaUsd, acceptablePrice, false);
+        id = _push(owner, marketId, isLong, false, 0, sizeDeltaUsd, acceptablePrice, false, true);
     }
 
     function _push(
         address owner, bytes32 marketId, bool isLong, bool isIncrease,
-        uint256 collateralTokens, uint256 sizeDeltaUsd, uint256 acceptablePrice, bool fromBalance
+        uint256 collateralTokens, uint256 sizeDeltaUsd, uint256 acceptablePrice, bool fromBalance, bool payoutToBalance
     ) internal returns (uint256 id) {
         id = requests.length;
         requests.push(Request({
@@ -249,7 +252,8 @@ contract XKubPerpRouter is ReentrancyGuard {
             executionFee: msg.value,
             createdAt: uint64(block.timestamp),
             status: STATUS_PENDING,
-            fromBalance: fromBalance
+            fromBalance: fromBalance,
+            payoutToBalance: payoutToBalance
         }));
         emit RequestCreated(id, owner, marketId, isLong, isIncrease,
             collateralTokens, sizeDeltaUsd, acceptablePrice, msg.value);
@@ -267,24 +271,25 @@ contract XKubPerpRouter is ReentrancyGuard {
     function setTrigger(bytes32 marketId, bool isLong, uint256 tpPrice, uint256 slPrice)
         external payable nonReentrant
     {
-        _setTrigger(msg.sender, marketId, isLong, tpPrice, slPrice);
+        _setTrigger(msg.sender, marketId, isLong, tpPrice, slPrice, false);
     }
 
-    /// @notice Agent version — set a TP/SL on the owner's behalf.
+    /// @notice Agent version — set a TP/SL on the owner's behalf. Payout on
+    ///         trigger returns to the owner's trading balance (1-click).
     function setTriggerFor(address owner, bytes32 marketId, bool isLong, uint256 tpPrice, uint256 slPrice)
         external payable nonReentrant
     {
         require(isAgent[owner][msg.sender], "!agent");
-        _setTrigger(owner, marketId, isLong, tpPrice, slPrice);
+        _setTrigger(owner, marketId, isLong, tpPrice, slPrice, true);
     }
 
-    function _setTrigger(address owner, bytes32 marketId, bool isLong, uint256 tpPrice, uint256 slPrice) internal {
+    function _setTrigger(address owner, bytes32 marketId, bool isLong, uint256 tpPrice, uint256 slPrice, bool payoutToBalance) internal {
         require(tpPrice > 0 || slPrice > 0, "empty");
         require(msg.value >= minExecutionFee, "fee too low");
         bytes32 k = _triggerKey(owner, marketId, isLong);
         Trigger storage t = triggers[k];
         if (t.active && t.executionFee > 0) _payNative(owner, t.executionFee); // refund prior fee
-        triggers[k] = Trigger(tpPrice, slPrice, msg.value, true);
+        triggers[k] = Trigger(tpPrice, slPrice, msg.value, true, payoutToBalance);
         emit TriggerSet(owner, marketId, isLong, tpPrice, slPrice);
     }
 
@@ -330,8 +335,14 @@ contract XKubPerpRouter is ReentrancyGuard {
         bool slHit = t.slPrice > 0 && (isLong ? price <= t.slPrice : price >= t.slPrice);
         require(tpHit || slHit, "not triggered");
 
+        bool toBalance = t.payoutToBalance;
         delete triggers[k];
-        market.decreasePositionFor(owner, marketId, isLong, sizeUsd); // close full at fresh price
+        if (toBalance) {
+            uint256 payout = market.decreasePositionForTo(owner, marketId, isLong, sizeUsd, address(this));
+            collateralBalance[owner] += payout;
+        } else {
+            market.decreasePositionFor(owner, marketId, isLong, sizeUsd); // close full at fresh price
+        }
         _payNative(msg.sender, fee);
         emit TriggerExecuted(owner, marketId, isLong, msg.sender, price, tpHit);
     }
@@ -364,6 +375,12 @@ contract XKubPerpRouter is ReentrancyGuard {
         bool success;
         if (r.isIncrease) {
             try market.increasePositionFor(r.owner, r.marketId, r.isLong, r.collateralTokens, r.sizeDeltaUsd) {
+                success = true;
+            } catch {}
+        } else if (r.payoutToBalance) {
+            // 1-click close: payout returns to the owner's trading balance
+            try market.decreasePositionForTo(r.owner, r.marketId, r.isLong, r.sizeDeltaUsd, address(this)) returns (uint256 payout) {
+                collateralBalance[r.owner] += payout;
                 success = true;
             } catch {}
         } else {

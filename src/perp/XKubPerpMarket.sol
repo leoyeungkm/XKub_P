@@ -304,27 +304,42 @@ contract XKubPerpMarket is ReentrancyGuard {
         uint256 sizeDeltaUsd
     ) external nonReentrant {
         require(directTradingEnabled, "use router");
-        _decreasePosition(msg.sender, marketId, isLong, sizeDeltaUsd);
+        _decreasePosition(msg.sender, marketId, isLong, sizeDeltaUsd, msg.sender);
     }
 
-    /// @notice Router entry — payout still goes to the position owner.
+    /// @notice Router entry — payout goes to the position owner's wallet.
     function decreasePositionFor(
         address owner,
         bytes32 marketId,
         bool isLong,
         uint256 sizeDeltaUsd
     ) external nonReentrant onlyRouter {
-        _decreasePosition(owner, marketId, isLong, sizeDeltaUsd);
+        _decreasePosition(owner, marketId, isLong, sizeDeltaUsd, owner);
+    }
+
+    /// @notice Router entry that sends the payout to `payoutTo` (the router)
+    ///         instead of the owner's wallet — used for 1-click closes so funds
+    ///         return to the owner's trading balance. Returns KUSDT paid out.
+    function decreasePositionForTo(
+        address owner,
+        bytes32 marketId,
+        bool isLong,
+        uint256 sizeDeltaUsd,
+        address payoutTo
+    ) external nonReentrant onlyRouter returns (uint256 payoutTokens) {
+        return _decreasePosition(owner, marketId, isLong, sizeDeltaUsd, payoutTo);
     }
 
     /// @dev Close all or part of a position. Collateral is released
-    ///      proportionally; PnL realized on the closed portion.
+    ///      proportionally; PnL realized on the closed portion. Payout (KUSDT)
+    ///      goes to `payoutTo`; returns the token amount paid.
     function _decreasePosition(
         address owner,
         bytes32 marketId,
         bool isLong,
-        uint256 sizeDeltaUsd
-    ) internal {
+        uint256 sizeDeltaUsd,
+        address payoutTo
+    ) internal returns (uint256 payoutTokens) {
         bytes32 key = _positionKey(owner, marketId, isLong);
         Position storage p = positions[key];
         require(p.sizeUsd > 0, "!position");
@@ -379,8 +394,15 @@ contract XKubPerpMarket is ReentrancyGuard {
         }
 
         _sendToPool(toPoolUsd + borrowFeeUsd);
-        if (fromCollateralUsd > 0) kusdt.safeTransfer(owner, fromCollateralUsd / scaler);
-        if (fromPoolUsd > 0) pool.payOutUsd(owner, fromPoolUsd);
+        if (fromCollateralUsd > 0) {
+            uint256 t = fromCollateralUsd / scaler;
+            kusdt.safeTransfer(payoutTo, t);
+            payoutTokens += t;
+        }
+        if (fromPoolUsd > 0) {
+            pool.payOutUsd(payoutTo, fromPoolUsd);
+            payoutTokens += fromPoolUsd / scaler;
+        }
         _distributeFees(owner, closeFeeUsd);
 
         emit PositionDecreased(owner, marketId, isLong, sizeDeltaUsd, price, pnlUsd, payoutUsd, closeFeeUsd + borrowFeeUsd + rapidLpFeeUsd);

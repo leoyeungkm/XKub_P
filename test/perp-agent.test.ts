@@ -118,21 +118,24 @@ describe("XKub Perp — agent one-click trading", () => {
     ).to.be.reverted;
   });
 
-  it("agent close pays out to the owner's wallet", async () => {
+  it("agent close returns payout to the owner's trading balance, not the wallet", async () => {
     const { router, kusdt, keeper, owner, agent } = await loadFixture(enabledFixture);
 
     await router.connect(agent).createIncreaseRequestFor(
       owner.address, BTC, true, usd(1_000), usd(5_000), 0, { value: FEE });
     await router.connect(keeper).executeRequest(0);
 
-    const before = await kusdt.balanceOf(owner.address);
+    const walletBefore = await kusdt.balanceOf(owner.address);
+    const balBefore = await router.collateralBalance(owner.address); // 9_000 left after opening
     const agentBefore = await kusdt.balanceOf(agent.address);
     await router.connect(agent).createDecreaseRequestFor(
       owner.address, BTC, true, usd(5_000), 0, { value: FEE });
     await router.connect(keeper).executeRequest(1);
 
-    expect(await kusdt.balanceOf(owner.address)).to.be.gt(before);   // collateral - fees back
-    expect(await kusdt.balanceOf(agent.address)).to.equal(agentBefore); // agent gets nothing
+    // payout credited back to the trading balance (1-click stays self-contained)
+    expect(await router.collateralBalance(owner.address)).to.be.gt(balBefore);
+    expect(await kusdt.balanceOf(owner.address)).to.equal(walletBefore);   // wallet untouched
+    expect(await kusdt.balanceOf(agent.address)).to.equal(agentBefore);    // agent gets nothing
   });
 
   // ─── Refund paths ──────────────────────────────────────────────────────────

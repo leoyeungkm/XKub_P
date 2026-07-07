@@ -89,7 +89,7 @@ export const routerAbi = parseAbi([
   "function cancelRequest(uint256 id)",
   "function minExecutionFee() view returns (uint256)",
   "function requestsCount() view returns (uint256)",
-  "function requests(uint256 id) view returns (address owner, bytes32 marketId, bool isLong, bool isIncrease, uint256 collateralTokens, uint256 sizeDeltaUsd, uint256 acceptablePrice, uint256 executionFee, uint64 createdAt, uint8 status, bool fromBalance)",
+  "function requests(uint256 id) view returns (address owner, bytes32 marketId, bool isLong, bool isIncrease, uint256 collateralTokens, uint256 sizeDeltaUsd, uint256 acceptablePrice, uint256 executionFee, uint64 createdAt, uint8 status, bool fromBalance, bool payoutToBalance)",
   // One-click trading
   "function depositCollateral(uint256 tokens)",
   "function withdrawCollateral(uint256 tokens)",

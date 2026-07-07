@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>XKub Perp — Trade</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #121722;
+    --panel-2: #171e2c;
+    --border: #232c3f;
+    --text: #e6ebf5;
+    --muted: #7d8aa5;
+    --green: #22c98a;
+    --green-dim: #123b2d;
+    --red: #f0506e;
+    --red-dim: #3d1622;
+    --accent: #4f7cff;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", -apple-system, Roboto, sans-serif;
+    font-size: 14px; min-height: 100vh;
+  }
+  button { font-family: inherit; cursor: pointer; border: none; }
+  input, select { font-family: inherit; }
+
+  /* ── top bar ─────────────────────────────── */
+  header {
+    display: flex; align-items: center; gap: 20px;
+    padding: 10px 20px; border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .logo { font-size: 18px; font-weight: 700; letter-spacing: .5px; }
+  .logo span { color: var(--accent); }
+  .net-tag {
+    font-size: 11px; color: var(--muted); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 20px;
+  }
+  .spacer { flex: 1; }
+  #connectBtn {
+    background: var(--accent); color: #fff; padding: 8px 18px;
+    border-radius: var(--radius); font-weight: 600;
+  }
+  #connectBtn.connected { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); }
+  #faucetBtn {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+    padding: 8px 14px; border-radius: var(--radius);
+  }
+  #faucetBtn:hover { color: var(--text); }
+
+  /* ── market bar ──────────────────────────── */
+  .market-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 20px; border-bottom: 1px solid var(--border);
+  }
+  .mkt-tab {
+    background: var(--panel); color: var(--muted); font-weight: 600;
+    padding: 8px 16px; border-radius: var(--radius); border: 1px solid transparent;
+  }
+  .mkt-tab.active { color: var(--text); border-color: var(--accent); background: var(--panel-2); }
+  .mkt-price { margin-left: 16px; font-size: 20px; font-weight: 700; }
+  .mkt-meta { color: var(--muted); font-size: 12px; margin-left: 14px; line-height: 1.5; }
+
+  /* ── layout ──────────────────────────────── */
+  .main {
+    display: grid; grid-template-columns: 1fr 340px; gap: 14px;
+    padding: 14px 20px; max-width: 1500px; margin: 0 auto;
+  }
+  @media (max-width: 1000px) { .main { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  .panel h3 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); padding: 12px 14px; border-bottom: 1px solid var(--border);
+  }
+  #chartWrap { height: 440px; }
+  #chartWrap iframe { width: 100%; height: 100%; border: 0; }
+
+  /* ── trade panel ─────────────────────────── */
+  .side-tabs { display: flex; }
+  .side-tabs button {
+    flex: 1; padding: 12px; font-weight: 700; font-size: 15px;
+    background: var(--panel-2); color: var(--muted);
+  }
+  .side-tabs .long.active { background: var(--green-dim); color: var(--green); box-shadow: inset 0 -2px 0 var(--green); }
+  .side-tabs .short.active { background: var(--red-dim); color: var(--red); box-shadow: inset 0 -2px 0 var(--red); }
+  .trade-body { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .field label { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .field label .max { color: var(--accent); cursor: pointer; }
+  .field input[type=number], .field select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 12px; border-radius: 8px; font-size: 15px;
+  }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .lev-marks { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
+  .summary { background: var(--bg); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; }
+  .summary div { display: flex; justify-content: space-between; padding: 3px 0; }
+  .summary .k { color: var(--muted); }
+  #submitBtn {
+    padding: 13px; border-radius: var(--radius); font-weight: 700; font-size: 15px; color: #fff;
+  }
+  #submitBtn.long { background: var(--green); }
+  #submitBtn.short { background: var(--red); }
+  #submitBtn:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* ── earn panel ──────────────────────────── */
+  .earn-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .earn-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12.5px; }
+  .earn-stats .cell { background: var(--bg); border-radius: 8px; padding: 8px 10px; }
+  .earn-stats .k { color: var(--muted); font-size: 11px; }
+  .earn-row { display: flex; gap: 8px; }
+  .earn-row input {
+    flex: 1; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 9px 11px; border-radius: 8px;
+  }
+  .earn-row button {
+    padding: 9px 14px; border-radius: 8px; font-weight: 600;
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  }
+  .earn-row button:hover { border-color: var(--accent); }
+
+  /* ── tables ──────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11.5px; padding: 8px 14px; border-bottom: 1px solid var(--border); }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  .empty { color: var(--muted); padding: 18px 14px; font-size: 13px; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+  .tbl-btn {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    padding: 5px 12px; border-radius: 7px; font-size: 12px;
+  }
+  .tbl-btn:hover { border-color: var(--red); color: var(--red); }
+
+  /* ── toasts ──────────────────────────────── */
+  #toasts { position: fixed; bottom: 18px; right: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 99; }
+  .toast {
+    background: var(--panel-2); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    padding: 11px 16px; border-radius: 8px; font-size: 13px; max-width: 340px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.45);
+  }
+  .toast.ok { border-left-color: var(--green); }
+  .toast.err { border-left-color: var(--red); }
+  .left-col { display: flex; flex-direction: column; gap: 14px; }
+  .right-col { display: flex; flex-direction: column; gap: 14px; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo">X<span>Kub</span> Perp</div>
+    <div class="net-tag" id="netTag">—</div>
+    <div class="spacer"></div>
+    <button id="faucetBtn">Mint test KUSDT</button>
+    <button id="connectBtn">Connect Wallet</button>
+  </header>
+
+  <div class="market-bar">
+    <div id="marketTabs"></div>
+    <div class="mkt-price" id="mktPrice">—</div>
+    <div class="mkt-meta" id="mktMeta"></div>
+  </div>
+
+  <div class="main">
+    <div class="left-col">
+      <div class="panel" id="chartWrap"></div>
+
+      <div class="panel">
+        <h3>Positions</h3>
+        <table>
+          <thead><tr>
+            <th>Market</th><th>Side</th><th>Size</th><th>Collateral</th>
+            <th>Entry</th><th>Mark</th><th>PnL</th><th></th>
+          </tr></thead>
+          <tbody id="positionsBody"></tbody>
+        </table>
+        <div class="empty" id="positionsEmpty">No open positions</div>
+      </div>
+
+      <div class="panel">
+        <h3>Pending Orders (two-step execution)</h3>
+        <table>
+          <thead><tr>
+            <th>#</th><th>Type</th><th>Market</th><th>Side</th><th>Size</th><th>Status</th><th></th>
+          </tr></thead>
+          <tbody id="requestsBody"></tbody>
+        </table>
+        <div class="empty" id="requestsEmpty">No pending orders</div>
+      </div>
+    </div>
+
+    <div class="right-col">
+      <div class="panel">
+        <div class="side-tabs">
+          <button class="long active" id="tabLong">Long</button>
+          <button class="short" id="tabShort">Short</button>
+        </div>
+        <div class="trade-body">
+          <div class="field">
+            <label>Collateral (KUSDT) <span class="max" id="maxBtn">Balance: —</span></label>
+            <input type="number" id="collateralInput" placeholder="0.0" min="0" />
+          </div>
+          <div class="field">
+            <label>Leverage <span id="levLabel">2x</span></label>
+            <input type="range" id="levSlider" min="1" max="10" step="1" value="2" />
+            <div class="lev-marks"><span>1x</span><span id="levMax">10x</span></div>
+          </div>
+          <div class="field">
+            <label>Max slippage</label>
+            <select id="slippageSel">
+              <option value="30">0.3%</option>
+              <option value="50" selected>0.5%</option>
+              <option value="100">1%</option>
+              <option value="0">No limit</option>
+            </select>
+          </div>
+          <div class="summary">
+            <div><span class="k">Position size</span><span id="sumSize">—</span></div>
+            <div><span class="k">Entry (oracle)</span><span id="sumEntry">—</span></div>
+            <div><span class="k">Est. liq. price</span><span id="sumLiq">—</span></div>
+            <div><span class="k">Open fee (0.1%)</span><span id="sumFee">—</span></div>
+            <div><span class="k">Execution fee</span><span id="sumExecFee">—</span></div>
+          </div>
+          <button id="submitBtn" class="long">Long BTC</button>
+          <div style="color:var(--muted);font-size:11.5px;line-height:1.5">
+            Orders are executed by a keeper at the next fresh oracle price
+            (front-run protection). Unexecuted orders can be cancelled after 60s.
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Earn — XPLP Liquidity Pool</h3>
+        <div class="earn-body">
+          <div class="earn-stats">
+            <div class="cell"><div class="k">Pool value</div><div id="poolValue">—</div></div>
+            <div class="cell"><div class="k">XPLP price</div><div id="plpPrice">—</div></div>
+            <div class="cell"><div class="k">Your XPLP</div><div id="myPlp">—</div></div>
+            <div class="cell"><div class="k">Your value</div><div id="myPlpValue">—</div></div>
+          </div>
+          <div class="earn-row">
+            <input type="number" id="lpAmount" placeholder="KUSDT / XPLP amount" min="0" />
+          </div>
+          <div class="earn-row">
+            <button id="lpDepositBtn" style="flex:1">Deposit</button>
+            <button id="lpWithdrawBtn" style="flex:1">Withdraw</button>
+          </div>
+          <div style="color:var(--muted);font-size:11.5px">
+            LPs are the counterparty to all trades and earn all fees.
+            15-minute withdraw cooldown after each deposit.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.umd.min.js"></script>
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

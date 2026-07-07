@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0e14;
+  --color-panel: #121722;
+  --color-panel2: #171e2c;
+  --color-line: #232c3f;
+  --color-fg: #e6ebf5;
+  --color-muted: #7d8aa5;
+  --color-green: #22c98a;
+  --color-greenDim: #123b2d;
+  --color-red: #f0506e;
+  --color-redDim: #3d1622;
+  --color-accent: #4f7cff;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-size: 14px;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}

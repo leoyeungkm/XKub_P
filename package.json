@@ -1,0 +1,46 @@
+{
+  "name": "xkub-contracts",
+  "version": "1.0.0",
+  "description": "XKub protocol on KUB Chain (Bitkub Chain) — spot DEX trading via Diamon AMM (formerly HypersFun port)",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "clean": "hardhat clean",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy-kub-testnet.ts --network hardhat",
+    "deploy:testnet": "hardhat run scripts/deploy-kub-testnet.ts --network kubTestnet",
+    "deploy:mainnet": "hardhat run scripts/deploy-kub-testnet.ts --network kubMainnet",
+    "deploy:factory:local": "hardhat run scripts/deploy-kub-factory.ts --network hardhat",
+    "deploy:factory:testnet": "hardhat run scripts/deploy-kub-factory.ts --network kubTestnet",
+    "deploy:factory:mainnet": "hardhat run scripts/deploy-kub-factory.ts --network kubMainnet",
+    "deploy:perp:local": "hardhat run scripts/deploy-perp-testnet.ts --network hardhat",
+    "deploy:perp:testnet": "hardhat run scripts/deploy-perp-testnet.ts --network kubTestnet",
+    "keeper:perp:testnet": "hardhat run scripts/perp-keeper-bot.ts --network kubTestnet",
+    "frontend": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
+    "@nomicfoundation/hardhat-ethers": "^3.0.0",
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@typechain/ethers-v6": "^0.5.0",
+    "@typechain/hardhat": "^9.0.0",
+    "@types/chai": "^4.3.0",
+    "@types/mocha": "^10.0.0",
+    "@types/node": "^20.0.0",
+    "chai": "^4.3.0",
+    "ethers": "^6.9.0",
+    "hardhat": "^2.19.0",
+    "hardhat-gas-reporter": "^1.0.0",
+    "solidity-coverage": "^0.8.0",
+    "ts-node": "^10.9.0",
+    "typechain": "^8.3.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.4.0",
+    "@openzeppelin/contracts-upgradeable": "^5.4.0",
+    "@openzeppelin/hardhat-upgrades": "^3.9.1",
+    "dotenv": "^16.3.0"
+  }
+}

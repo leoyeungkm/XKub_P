@@ -1,0 +1,27 @@
+{
+  "network": "kubTestnet",
+  "chainId": 25925,
+  "deployer": "0xe8900BFdB3AaaD4F472479f6d430eB39CbaBfa9F",
+  "deployedAt": "2026-05-26T04:55:24.055Z",
+  "kusdtDecimals": 18,
+  "addresses": {
+    "KUSDT": "0xB16F025234661aFE6Ab43EEEE8e5a688122C3D0c",
+    "KKUB": "0xc4A64A229B20D3059D0896481767d3c283B79661",
+    "DiamonFactory": "0x0ACeeb41E01057eED664300bff4585d607583109",
+    "DiamonRouter": "0x8b733621F82B0E1969c767c4C32Ed1687DE8Ad2B",
+    "KKUBKUSDTPair": "0x72E5e0906f7231868C56f579174058d7119D540a",
+    "KubTestFactory": "0xe808862c53101aDDa3124e09B2F2d454319B88fC",
+    "HyperFunMath": "0x196483aB233fb608e60be2eA6d4C02EB2DF18Bb7",
+    "HyperFunTokenLib": "0x83F0CA2248FC625A2Abd07231cf9598a2156465C",
+    "KubFunToken": "0x0d98c7a19d0D8d38a7D3646f07F1Ae4287c6CAB2",
+    "SpotNavVault": "0x026B67c84a3fE086D2f0Dc89031AD6D1a77De1AA",
+    "KubFunTrading": "0xdDe216c9A2BAF3eA1538D0d98F8B5a4D5106DD7a"
+  },
+  "notes": {
+    "DiamonFactory": "MOCK — replace with real Diamon factory on mainnet",
+    "DiamonRouter": "MOCK — replace with 0xAb30a29168D792c5e6a54E4bcF1Aec926a3b20FA on mainnet",
+    "KubTestFactory": "MOCK — replace with full KubFunFactory on mainnet",
+    "KUSDT": "MOCK — replace with real KUSDT address on mainnet",
+    "KKUB": "MOCK — replace with real KKUB address on mainnet"
+  }
+}

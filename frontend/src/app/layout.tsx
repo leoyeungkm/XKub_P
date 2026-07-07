@@ -4,6 +4,7 @@ import "./globals.css";
 import Providers from "@/components/Providers";
 import Header from "@/components/Header";
 import OnboardingModal from "@/components/OnboardingModal";
+import RefCapture from "@/components/RefCapture";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -35,6 +36,7 @@ export default function RootLayout({
           <Header />
           {children}
           <OnboardingModal />
+          <RefCapture />
         </Providers>
       </body>
     </html>

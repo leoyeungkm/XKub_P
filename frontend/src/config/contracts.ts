@@ -19,6 +19,7 @@ export const ADDR = {
   market: CFG.addresses.XKubPerpMarket as `0x${string}`,
   router: CFG.addresses.XKubPerpRouter as `0x${string}`,
   pool: CFG.addresses.XKubPerpPool as `0x${string}`,
+  referral: (CFG.addresses as Record<string, string>).XKubReferral as `0x${string}` | undefined,
 } as const;
 
 export const MARKETS = CFG.markets as { symbol: string; maxLeverageX: number }[];
@@ -103,4 +104,16 @@ export const marketEventsAbi = parseAbi([
 export const routerEventsAbi = parseAbi([
   "event CollateralDeposited(address indexed owner, uint256 tokens)",
   "event CollateralWithdrawn(address indexed owner, uint256 tokens)",
+]);
+
+export const referralAbi = parseAbi([
+  "function registerCode(bytes32 code)",
+  "function setReferrer(bytes32 code)",
+  "function claim() returns (uint256)",
+  "function ownerCode(address owner) view returns (bytes32)",
+  "function codeOwner(bytes32 code) view returns (address)",
+  "function referredBy(address trader) view returns (bytes32)",
+  "function claimableUsd(address referrer) view returns (uint256)",
+  "function defaultRebateBps() view returns (uint256)",
+  "function bound(address trader) view returns (bool)",
 ]);

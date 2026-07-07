@@ -63,6 +63,7 @@ export default function Header() {
       <nav className="flex items-center gap-0.5 text-[13px]">
         <NavLink href="/" label="Trade" active={pathname === "/"} />
         <NavLink href="/portfolio" label="Portfolio" active={pathname === "/portfolio"} />
+        <NavLink href="/referral" label="Referral" active={pathname === "/referral"} />
       </nav>
       <div className="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[10.5px] text-muted lg:flex">
         <span className="h-1.5 w-1.5 rounded-full bg-green" />

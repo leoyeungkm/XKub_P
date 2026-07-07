@@ -55,13 +55,13 @@ export const parseB32 = (hex: string): string => {
   return out;
 };
 
-// Bitkub-native charts (THB-quoted) for ecosystem consistency. Note: these plot
-// in THB, while the platform's marks/PnL are USD — switch BTC/ETH back to
-// BINANCE:*USDT if you'd rather the chart match the USD figures.
+// Bitkub-native charts, but quoted in USD via a TradingView spread symbol
+// (BITKUB:xxxTHB / BITKUB:USDTTHB) so the axis matches the platform's USD
+// marks/PnL while the data still comes from Bitkub.
 export const TV_SYMBOLS: Record<string, string> = {
-  BTC: "BITKUB:BTCTHB",
-  ETH: "BITKUB:ETHTHB",
-  KUB: "BITKUB:KUBTHB",
+  BTC: "BITKUB:BTCTHB/BITKUB:USDTTHB",
+  ETH: "BITKUB:ETHTHB/BITKUB:USDTTHB",
+  KUB: "BITKUB:KUBTHB/BITKUB:USDTTHB",
 };
 
 // ─── ABIs ────────────────────────────────────────────────────────────────────

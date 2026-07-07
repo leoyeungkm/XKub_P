@@ -210,8 +210,9 @@ function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[
             const entryN = Number(formatEther(p.entry));
             const liq = p.isLong ? entryN * (1 - move) : entryN * (1 + move);
             const up = p.pnl >= 0n;
+            const isClosing = !!closing[`${p.symbol}-${p.isLong}`];
             return (
-              <tr key={p.symbol + p.isLong} className="border-b border-lineSoft last:border-0 hover:bg-panel2/40">
+              <tr key={p.symbol + p.isLong} className={`border-b border-lineSoft last:border-0 ${isClosing ? "bg-panel2/30 text-mutedDim" : "hover:bg-panel2/40"}`}>
                 <td className="px-3 py-2.5 font-medium">{p.symbol}-PERP</td>
                 <td className="tnum px-3 py-2.5">{fmtNum(Number(formatEther(p.sizeTokens)), 4)}</td>
                 <td className="px-3 py-2.5">
@@ -249,10 +250,11 @@ function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[
                 <td className="px-3 py-2.5 text-right">
                   <button
                     onClick={() => onClose(p)}
-                    disabled={!!closing[`${p.symbol}-${p.isLong}`]}
-                    className="rounded border border-line px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-red/50 hover:text-red disabled:opacity-50"
+                    disabled={isClosing}
+                    className="inline-flex items-center gap-1.5 rounded border border-line px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-red/50 hover:text-red disabled:opacity-70"
                   >
-                    {closing[`${p.symbol}-${p.isLong}`] ? "平倉中…" : "市價平倉"}
+                    {isClosing && <span className="h-2.5 w-2.5 shrink-0 animate-spin rounded-full border border-muted/30 border-t-muted" />}
+                    {isClosing ? "平倉中…" : "市價平倉"}
                   </button>
                 </td>
               </tr>

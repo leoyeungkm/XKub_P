@@ -116,6 +116,13 @@ contract XKubPerpMarket is ReentrancyGuard {
     uint256 public minCollateralUsd    = 10e18;  // 10 KUSDT
     uint256 public maxPriceAge         = 300;    // seconds
 
+    // Anti-scalp: closing within rapidCloseWindow of the last increase pays an
+    // extra LP fee (protects LPs from oracle-lag round-trips). Goes 100% to the
+    // pool — not split with protocol/referral.
+    uint256 public rapidCloseFeeBps    = 1;      // 0.01% of closed size
+    uint256 public rapidCloseWindow    = 30;     // seconds
+    mapping(bytes32 => uint64) public lastIncreaseAt; // positionKey → last open/increase time
+
     // VIP fee tiers: a trader's tier gives a discount on the position fee.
     // Tier 0 = default (0% discount). Admin assigns tiers and per-tier discounts.
     mapping(address => uint8)  public feeTier;
@@ -147,6 +154,7 @@ contract XKubPerpMarket is ReentrancyGuard {
     event TreasurySet(address indexed treasury);
     event ProtocolFeeShareSet(uint256 bps);
     event ProtocolFeePaid(address indexed treasury, uint256 usd);
+    event RapidCloseParamsSet(uint256 feeBps, uint256 windowSeconds);
 
     modifier onlyAdmin() {
         require(msg.sender == admin, "!admin");
@@ -252,6 +260,7 @@ contract XKubPerpMarket is ReentrancyGuard {
             // open is accepted. Collateral top-ups (sizeDeltaUsd = 0) skip the
             // check — they only ever improve position health.
             require(p.sizeUsd <= (p.collateralUsd + openFeeUsd) * cfg.maxLeverageX, "leverage too high");
+            lastIncreaseAt[key] = uint64(block.timestamp); // start the rapid-close clock
         }
 
         require(p.collateralUsd >= minCollateralUsd, "collateral < min");
@@ -321,8 +330,15 @@ contract XKubPerpMarket is ReentrancyGuard {
 
         uint256 closeFeeUsd = (sizeDeltaUsd * effectiveFeeBps(owner)) / 10000;
 
+        // Extra LP fee for closing within the rapid-close window (100% to pool)
+        uint256 rapidLpFeeUsd = 0;
+        uint64 openedAt = lastIncreaseAt[key];
+        if (openedAt != 0 && block.timestamp - openedAt < rapidCloseWindow) {
+            rapidLpFeeUsd = (sizeDeltaUsd * rapidCloseFeeBps) / 10000;
+        }
+
         // Split payout between trader / pool
-        int256 grossUsd = int256(collateralShare) + pnlUsd - int256(closeFeeUsd);
+        int256 grossUsd = int256(collateralShare) + pnlUsd - int256(closeFeeUsd) - int256(rapidLpFeeUsd);
         uint256 payoutUsd        = grossUsd > 0 ? uint256(grossUsd) : 0;
         uint256 fromPoolUsd      = payoutUsd > collateralShare ? payoutUsd - collateralShare : 0;
         uint256 fromCollateralUsd = payoutUsd - fromPoolUsd;
@@ -348,7 +364,7 @@ contract XKubPerpMarket is ReentrancyGuard {
         if (fromPoolUsd > 0) pool.payOutUsd(owner, fromPoolUsd);
         _distributeFees(owner, closeFeeUsd);
 
-        emit PositionDecreased(owner, marketId, isLong, sizeDeltaUsd, price, pnlUsd, payoutUsd, closeFeeUsd + borrowFeeUsd);
+        emit PositionDecreased(owner, marketId, isLong, sizeDeltaUsd, price, pnlUsd, payoutUsd, closeFeeUsd + borrowFeeUsd + rapidLpFeeUsd);
     }
 
     // ─── Liquidation ───────────────────────────────────────────────────────────
@@ -728,6 +744,16 @@ contract XKubPerpMarket is ReentrancyGuard {
         require(bps <= MAX_PROTOCOL_SHARE_BPS, "> max");
         protocolFeeShareBps = bps;
         emit ProtocolFeeShareSet(bps);
+    }
+
+    /// @notice Configure the rapid-close LP fee (extra fee for closing soon
+    ///         after opening). feeBps ≤ 1% and window ≤ 10 minutes.
+    function setRapidCloseParams(uint256 feeBps, uint256 windowSeconds) external onlyAdmin {
+        require(feeBps <= 100, "fee <= 1%");
+        require(windowSeconds <= 600, "window <= 10m");
+        rapidCloseFeeBps = feeBps;
+        rapidCloseWindow = windowSeconds;
+        emit RapidCloseParamsSet(feeBps, windowSeconds);
     }
 
     /// @notice Testnet convenience only — leave OFF in production so all

@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
+import { loadFixture, time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 
 /*
   XKub Perp — VIP fee tiers + protocol revenue split
@@ -115,5 +115,37 @@ describe("XKub Perp — fee tiers & protocol split", () => {
     await expect(market.connect(trader).setTierDiscount(1, 100)).to.be.revertedWith("!admin");
     await expect(market.connect(trader).setTreasury(trader.address)).to.be.revertedWith("!admin");
     await expect(market.connect(trader).setProtocolFeeShareBps(100)).to.be.revertedWith("!admin");
+  });
+
+  // ─── Rapid-close LP fee ──────────────────────────────────────────────────
+
+  it("charges an extra 0.01% LP fee when closing within 30s", async () => {
+    const { market, trader, kusdt } = await loadFixture(deployFixture);
+    await market.connect(trader).increasePosition(BTC, true, usd(2_000), usd(10_000));
+    const before = await kusdt.balanceOf(trader.address);
+    await market.connect(trader).decreasePosition(BTC, true, usd(10_000)); // immediate close
+    const got = (await kusdt.balanceOf(trader.address)) - before;
+    // 2000 - openFee(3) - closeFee(3) - rapidFee(1) ≈ 1993
+    expect(got).to.be.closeTo(usd(1_993), usd(1) / 2n);
+  });
+
+  it("no rapid fee once the window has passed", async () => {
+    const { market, trader, kusdt } = await loadFixture(deployFixture);
+    await market.connect(trader).increasePosition(BTC, true, usd(2_000), usd(10_000));
+    await time.increase(31);
+    const before = await kusdt.balanceOf(trader.address);
+    await market.connect(trader).decreasePosition(BTC, true, usd(10_000));
+    const got = (await kusdt.balanceOf(trader.address)) - before;
+    // 2000 - openFee(3) - closeFee(3) - no rapid ≈ 1994
+    expect(got).to.be.closeTo(usd(1_994), usd(1) / 2n);
+  });
+
+  it("rapid-close fee is admin-tunable within bounds", async () => {
+    const { market, admin } = await loadFixture(deployFixture);
+    await market.connect(admin).setRapidCloseParams(5, 60);
+    expect(await market.rapidCloseFeeBps()).to.equal(5);
+    expect(await market.rapidCloseWindow()).to.equal(60);
+    await expect(market.connect(admin).setRapidCloseParams(101, 60)).to.be.revertedWith("fee <= 1%");
+    await expect(market.connect(admin).setRapidCloseParams(5, 601)).to.be.revertedWith("window <= 10m");
   });
 });

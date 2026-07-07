@@ -33,6 +33,9 @@ export function useMarketFees(symbol: string) {
       { address: ADDR.market, abi: marketAbi, functionName: "getMarketState", args: [b32(symbol)] },
       { address: ADDR.market, abi: marketAbi, functionName: "marketConfig", args: [b32(symbol)] },
       { address: ADDR.pool, abi: poolAbi, functionName: "poolValueUsd" },
+      { address: ADDR.market, abi: marketAbi, functionName: "maintenanceMarginBps" },
+      { address: ADDR.market, abi: marketAbi, functionName: "rapidCloseFeeBps" },
+      { address: ADDR.market, abi: marketAbi, functionName: "rapidCloseWindow" },
     ] as never[],
     query: { refetchInterval: 10000 },
   });
@@ -41,6 +44,9 @@ export function useMarketFees(symbol: string) {
   const state = data?.[1]?.result as readonly bigint[] | undefined;
   const cfg = data?.[2]?.result as readonly [boolean, bigint, bigint, bigint] | undefined;
   const poolValue = data?.[3]?.result as bigint | undefined;
+  const maintBps = data?.[4]?.result as bigint | undefined;
+  const rapidBps = data?.[5]?.result as bigint | undefined;
+  const rapidWindow = data?.[6]?.result as bigint | undefined;
 
   // rate/h = borrowRateFactorBps × sideOI / poolValue
   const hourly = (sideUsd: bigint) =>
@@ -52,6 +58,9 @@ export function useMarketFees(symbol: string) {
     feeBps: feeBps !== undefined ? Number(feeBps) : null,
     longRatePerHour: state ? hourly(state[0]) : null,   // % per hour
     shortRatePerHour: state ? hourly(state[1]) : null,
+    maintenanceBps: maintBps !== undefined ? Number(maintBps) : null,
+    rapidFeeBps: rapidBps !== undefined ? Number(rapidBps) : null,
+    rapidWindow: rapidWindow !== undefined ? Number(rapidWindow) : null,
   };
 }
 

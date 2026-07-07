@@ -9,6 +9,7 @@ import {
 } from "@/config/contracts";
 import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
+import { useAccountSummary } from "@/lib/portfolio";
 import { useMarketFees, useMyFee, useOraclePrice } from "./MarketBar";
 
 const SLIPPAGE_OPTS = [
@@ -18,6 +19,8 @@ const SLIPPAGE_OPTS = [
   { label: "No limit", bps: 0n },
 ];
 
+const COST_PRESETS = [10, 20, 50, 100];
+
 export default function TradePanel({ symbol }: { symbol: string }) {
   const { address } = useAccount();
   const client = usePublicClient();
@@ -26,6 +29,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
   const fees = useMarketFees(symbol);
   const myFee = useMyFee();
   const oneClick = useOneClick();
+  const account = useAccountSummary();
 
   const [isLong, setIsLong] = useState(true);
   const [collateral, setCollateral] = useState("");
@@ -52,13 +56,21 @@ export default function TradePanel({ symbol }: { symbol: string }) {
     query: { enabled: !!address, refetchInterval: 8000 },
   });
 
-  // liq. price estimate: loss ≈ collateral - 1% maintenance → Δp/p = 1/lev - 0.01
+  // liq. price estimate: loss ≈ collateral - maintenance → Δp/p = 1/lev - maint
+  const maint = fees.maintenanceBps !== null ? fees.maintenanceBps / 10000 : 0.01;
   const liqPrice = (() => {
     if (!(price > 0n) || !(colNum > 0)) return null;
-    const move = 1 / levClamped - 0.01;
+    const move = 1 / levClamped - maint;
     const p = Number(formatEther(price));
     return isLong ? p * (1 - move) : p * (1 + move);
   })();
+
+  const priceNum = Number(formatEther(price));
+  const amountTokens = priceNum > 0 ? sizeUsd / priceNum : 0;
+  const availableUsd = oneClick.active
+    ? Number(formatEther(tokenToUsd(oneClick.balance)))
+    : balance !== undefined ? Number(formatEther(tokenToUsd(balance))) : 0;
+  const maxLongUsd = availableUsd * levClamped;
 
   const submit = async () => {
     if (!address || !client) return toast.error("Connect wallet first");
@@ -127,43 +139,49 @@ export default function TradePanel({ symbol }: { symbol: string }) {
     }
   };
 
+  const borrowRate = isLong ? fees.longRatePerHour : fees.shortRatePerHour;
+
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-panel">
+      {/* header: margin mode + leverage + order type */}
+      <div className="flex items-center gap-2 border-b border-line px-3.5 py-2.5">
+        <span className="rounded bg-panel2 px-2 py-1 text-[11px] font-medium">逐倉 Isolated</span>
+        <span className="tnum rounded bg-panel2 px-2 py-1 text-[11px] font-medium text-accent">{levClamped}×</span>
+        <div className="flex-1" />
+        <div className="flex gap-0.5 text-[12px]">
+          <span className="rounded bg-accentDim px-2.5 py-1 font-medium text-accent">Market</span>
+          <span className="cursor-not-allowed rounded px-2.5 py-1 text-mutedDim" title="Limit orders coming soon">Limit</span>
+        </div>
+      </div>
+
+      {/* long / short */}
       <div className="grid grid-cols-2 gap-1 p-1">
         <button
           onClick={() => setIsLong(true)}
-          className={`rounded-md py-2.5 text-[14px] font-semibold transition-colors ${
+          className={`flex flex-col items-center rounded-md py-2 transition-colors ${
             isLong ? "bg-greenDim text-green" : "text-muted hover:text-fg"
           }`}
         >
-          Long
+          <span className="text-[13px] font-semibold">Buy / Long</span>
+          <span className="tnum text-[12px] opacity-80">{price > 0n ? fmtPrice(price) : "—"}</span>
         </button>
         <button
           onClick={() => setIsLong(false)}
-          className={`rounded-md py-2.5 text-[14px] font-semibold transition-colors ${
+          className={`flex flex-col items-center rounded-md py-2 transition-colors ${
             !isLong ? "bg-redDim text-red" : "text-muted hover:text-fg"
           }`}
         >
-          Short
+          <span className="text-[13px] font-semibold">Sell / Short</span>
+          <span className="tnum text-[12px] opacity-80">{price > 0n ? fmtPrice(price) : "—"}</span>
         </button>
       </div>
 
       <div className="flex flex-col gap-3 p-3.5 pt-1.5">
+        {/* cost */}
         <div>
           <div className="mb-1.5 flex justify-between text-[11px]">
-            <span className="eyebrow">Collateral{oneClick.active ? " · 1-click" : ""}</span>
-            <button
-              className="tnum text-accent transition-opacity hover:opacity-80"
-              onClick={() => {
-                const src = oneClick.active ? oneClick.balance : balance;
-                if (src !== undefined) setCollateral(
-                  String(Math.floor(Number(formatEther(tokenToUsd(src))) * 100) / 100));
-              }}
-            >
-              {oneClick.active
-                ? fmtUsd(tokenToUsd(oneClick.balance))
-                : balance !== undefined ? fmtUsd(tokenToUsd(balance)) : "—"}
-            </button>
+            <span className="eyebrow">Cost{oneClick.active ? " · 1-click" : ""}</span>
+            <span className="tnum text-muted">Available {fmtNum(availableUsd)} USD</span>
           </div>
           <div className="flex items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent/60">
             <input
@@ -171,10 +189,28 @@ export default function TradePanel({ symbol }: { symbol: string }) {
               onChange={(e) => setCollateral(e.target.value)}
               className="tnum w-full bg-transparent py-2.5 text-[15px] outline-none"
             />
-            <span className="eyebrow">KUSDT</span>
+            <span className="eyebrow">USD</span>
+          </div>
+          <div className="mt-1.5 grid grid-cols-5 gap-1">
+            {COST_PRESETS.map((v) => (
+              <button
+                key={v}
+                onClick={() => setCollateral(String(v))}
+                className="tnum rounded bg-panel2 py-1.5 text-[11.5px] text-muted transition-colors hover:text-fg"
+              >
+                ${v}
+              </button>
+            ))}
+            <button
+              onClick={() => setCollateral(String(Math.floor(availableUsd * 100) / 100))}
+              className="tnum rounded bg-panel2 py-1.5 text-[11.5px] text-accent transition-colors hover:opacity-80"
+            >
+              Max
+            </button>
           </div>
         </div>
 
+        {/* leverage */}
         <div>
           <div className="mb-2 flex justify-between text-[11px]">
             <span className="eyebrow">Leverage</span>
@@ -190,6 +226,16 @@ export default function TradePanel({ symbol }: { symbol: string }) {
           </div>
         </div>
 
+        {/* order preview */}
+        <div className="flex flex-col gap-1.5 rounded-md bg-bg px-3 py-3 text-[12px]">
+          <Row k={`Amount (${symbol})`} v={amountTokens > 0 ? `≈ ${fmtNum(amountTokens, 6)} ${symbol}` : "—"} />
+          <Row k="Order value" v={sizeUsd ? `${fmtNum(sizeUsd)} USD` : "—"} />
+          <Row k="Max long" v={maxLongUsd > 0 ? `${fmtNum(maxLongUsd, 0)} USD` : "—"} />
+          <Row k="Est. liq. price" v={liqPrice ? `$${fmtNum(liqPrice, liqPrice >= 100 ? 1 : 4)}` : "—"} accent />
+          <Row k="TP / SL" v="None" />
+        </div>
+
+        {/* slippage */}
         <div>
           <div className="eyebrow mb-1.5">Max slippage</div>
           <div className="grid grid-cols-4 gap-1">
@@ -207,26 +253,6 @@ export default function TradePanel({ symbol }: { symbol: string }) {
           </div>
         </div>
 
-        <div className="flex flex-col gap-1.5 rounded-md bg-bg px-3 py-3 text-[12px]">
-          <Row k="Position size" v={sizeUsd ? `${fmtNum(sizeUsd)} USD` : "—"} />
-          <Row k="Entry · oracle" v={price > 0n ? `$${fmtPrice(price)}` : "—"} />
-          <Row k="Est. liq. price" v={liqPrice ? `$${fmtNum(liqPrice, liqPrice >= 100 ? 1 : 4)}` : "—"} accent />
-          <div className="my-1 border-t border-lineSoft" />
-          <FeeRow
-            effBps={myFee.effectiveFeeBps ?? fees.feeBps}
-            baseBps={fees.feeBps}
-            sizeUsd={sizeUsd}
-            tierName={myFee.tierName}
-            tier={myFee.tier}
-          />
-          <Row
-            k="Borrow /h"
-            v={(isLong ? fees.longRatePerHour : fees.shortRatePerHour) !== null
-              ? `${(isLong ? fees.longRatePerHour : fees.shortRatePerHour)!.toFixed(4)}%` : "—"}
-          />
-          <Row k="Execution fee" v={minExecFee !== undefined ? `${formatEther(minExecFee)} KUB` : "—"} />
-        </div>
-
         <button
           onClick={submit}
           disabled={busy}
@@ -234,7 +260,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
             isLong ? "bg-green" : "bg-red"
           }`}
         >
-          {busy ? "Submitting…" : `${oneClick.active ? "⚡ " : ""}${isLong ? "Long" : "Short"} ${symbol}`}
+          {busy ? "Submitting…" : `${oneClick.active ? "⚡ " : ""}${isLong ? "Buy / Long" : "Sell / Short"} ${symbol}`}
         </button>
 
         <div className="text-[11px] leading-relaxed text-mutedDim">
@@ -242,15 +268,57 @@ export default function TradePanel({ symbol }: { symbol: string }) {
           protection. Cancel an unfilled order after 60s.
         </div>
       </div>
+
+      {/* instrument info */}
+      <Section title="Instrument Info">
+        <FeeRow
+          effBps={myFee.effectiveFeeBps ?? fees.feeBps}
+          baseBps={fees.feeBps}
+          sizeUsd={sizeUsd}
+          tierName={myFee.tierName}
+          tier={myFee.tier}
+        />
+        <Row k="LP / holding fee (per h)" v={borrowRate !== null ? `${borrowRate.toFixed(4)}%` : "—"} />
+        <Row k="Maintenance margin rate" v={fees.maintenanceBps !== null ? `${(fees.maintenanceBps / 100).toFixed(2)}%` : "—"} />
+        <Row
+          k="Rapid-close LP fee"
+          v={fees.rapidFeeBps !== null && fees.rapidWindow !== null
+            ? `${(fees.rapidFeeBps / 100).toFixed(2)}% · <${fees.rapidWindow}s` : "—"}
+        />
+        <Row k="Execution fee" v={minExecFee !== undefined ? `${formatEther(minExecFee)} KUB` : "—"} />
+      </Section>
+
+      {/* account overview (isolated) */}
+      <Section title="Account · Isolated">
+        <Row k="Balance" v={`${fmtUsd(account.tradingUsd)} USD`} />
+        <Row k="Wallet" v={`${fmtUsd(account.walletUsd)} USD`} />
+        <Row
+          k="Unrealized PnL"
+          v={`${account.unrealizedUsd >= 0n ? "+" : ""}${fmtUsd(account.unrealizedUsd)} USD`}
+          tone={account.unrealizedUsd >= 0n ? "green" : "red"}
+        />
+        <Row k="Used margin" v={`${fmtUsd(account.positionMarginUsd)} USD`} />
+        <Row k="Account value" v={`${fmtUsd(account.accountValueUsd)} USD`} accent />
+      </Section>
     </div>
   );
 }
 
-function Row({ k, v, accent }: { k: string; v: string; accent?: boolean }) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="border-t border-line px-3.5 py-3">
+      <div className="eyebrow mb-2">{title}</div>
+      <div className="flex flex-col gap-1.5 text-[12px]">{children}</div>
+    </div>
+  );
+}
+
+function Row({ k, v, accent, tone }: { k: string; v: string; accent?: boolean; tone?: "green" | "red" }) {
+  const color = tone === "green" ? "text-green" : tone === "red" ? "text-red" : accent ? "text-accent" : "text-fg";
   return (
     <div className="flex justify-between">
       <span className="text-muted">{k}</span>
-      <span className={`tnum ${accent ? "text-accent" : "text-fg"}`}>{v}</span>
+      <span className={`tnum ${color}`}>{v}</span>
     </div>
   );
 }

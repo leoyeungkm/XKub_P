@@ -122,9 +122,12 @@ function PositionsView({ rows, onClose }: { rows: PositionRow[]; onClose: (p: Po
                 <td className="px-3 py-2.5 font-medium">{p.symbol}-PERP</td>
                 <td className="tnum px-3 py-2.5">{fmtNum(Number(formatEther(p.sizeTokens)), 4)}</td>
                 <td className="px-3 py-2.5">
-                  <span className={`tnum rounded px-1.5 py-0.5 text-[11px] font-medium ${p.isLong ? "bg-greenDim text-green" : "bg-redDim text-red"}`}>
-                    {p.isLong ? "做多" : "做空"} {lev.toFixed(0)}x
-                  </span>
+                  <div className="flex flex-col gap-1">
+                    <span className={`tnum w-fit rounded px-1.5 py-0.5 text-[11px] font-medium ${p.isLong ? "bg-greenDim text-green" : "bg-redDim text-red"}`}>
+                      {p.isLong ? "做多" : "做空"} {lev.toFixed(0)}x
+                    </span>
+                    <span className="eyebrow !tracking-normal text-mutedDim">逐倉 Isolated</span>
+                  </div>
                 </td>
                 <td className="tnum px-3 py-2.5">{fmtUsd(p.sizeUsd)} USD</td>
                 <td className="tnum px-3 py-2.5">${fmtPrice(p.entry)}</td>

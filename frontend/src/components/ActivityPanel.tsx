@@ -110,7 +110,7 @@ function PositionsView({ rows, onClose }: { rows: PositionRow[]; onClose: (p: Po
       address: ADDR.router, abi: routerAbi, functionName: "triggers",
       args: [triggerKey(address, r.symbol, r.isLong)],
     })) as never[] : [],
-    query: { enabled: !!address && rows.length > 0, refetchInterval: 6000 },
+    query: { enabled: !!address && rows.length > 0, refetchInterval: 10000 },
   });
   const trigOf = (i: number) => {
     const t = trigData?.[i]?.result as readonly [bigint, bigint, bigint, boolean] | undefined;
@@ -196,7 +196,7 @@ function usePendingOrders() {
   const { data: rows = [], refetch } = useQuery({
     queryKey: ["activityPending", address],
     enabled: !!address && !!client,
-    refetchInterval: 5000,
+    refetchInterval: 10000,
     queryFn: async () => {
       const count = await client!.readContract({ address: ADDR.router, abi: routerAbi, functionName: "requestsCount" });
       const out: { id: bigint; symbol: string; isLong: boolean; isIncrease: boolean; sizeDeltaUsd: bigint }[] = [];

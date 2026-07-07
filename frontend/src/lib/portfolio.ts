@@ -27,7 +27,7 @@ export function usePositions() {
       { address: ADDR.market, abi: marketAbi, functionName: "getPositionPnl", args: [address!, b32(c.symbol), c.isLong] },
       { address: ADDR.oracle, abi: oracleAbi, functionName: "peekPrice", args: [b32(c.symbol)] },
     ]) as never[],
-    query: { enabled: !!address, refetchInterval: 6000 },
+    query: { enabled: !!address, refetchInterval: 10000 },
   });
 
   const rows: PositionRow[] = COMBOS.map((c, i) => {
@@ -93,7 +93,8 @@ export function useHistory() {
   return useQuery({
     queryKey: ["portfolioHistory", address],
     enabled: !!address && !!client,
-    refetchInterval: 15000,
+    refetchInterval: 30000,
+    staleTime: 20000,
     queryFn: async (): Promise<HistoryItem[]> => {
       const owner = address!;
       const items: HistoryItem[] = [];
@@ -137,18 +138,19 @@ export function useHistory() {
         const a = (l as { args: { tokens: bigint }; blockNumber: bigint; transactionHash: string });
         items.push({ kind: "withdraw", amountUsd: tokenToUsd(a.args.tokens), block: a.blockNumber, txHash: a.transactionHash });
       }
-      // Attach block timestamps (deduped) for date/time display
-      const uniqueBlocks = [...new Set(items.map((i) => i.block))];
+      items.sort((x, y) => Number(y.block - x.block));
+
+      // Attach block timestamps only for the most recent rows we'll display
+      // (fetching a block per record hammers the RPC on a busy chain).
+      const recent = items.slice(0, 40);
+      const uniqueBlocks = [...new Set(recent.map((i) => i.block))];
       const stamps = new Map<bigint, number>();
       await Promise.all(uniqueBlocks.map(async (bn) => {
-        try {
-          const b = await client!.getBlock({ blockNumber: bn });
-          stamps.set(bn, Number(b.timestamp));
-        } catch { /* leave undefined */ }
+        try { stamps.set(bn, Number((await client!.getBlock({ blockNumber: bn })).timestamp)); }
+        catch { /* leave undefined */ }
       }));
-      for (const i of items) i.timestamp = stamps.get(i.block);
+      for (const i of recent) i.timestamp = stamps.get(i.block);
 
-      items.sort((x, y) => Number(y.block - x.block));
       return items;
     },
   });

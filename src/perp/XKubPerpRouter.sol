@@ -419,6 +419,22 @@ contract XKubPerpRouter is ReentrancyGuard, EIP712 {
     ///         Executes at the fresh oracle price. Collateral for increases comes
     ///         from the owner's trading balance; close payouts return to it.
     function executeSignedOrder(Order calldata o, bytes calldata sig) external nonReentrant onlyKeeper {
+        _executeSignedOrder(o, sig);
+    }
+
+    /// @notice One-tx variant: apply a keeper-signed fresh price and execute
+    ///         atomically. Removes the separate price-post round-trip (halves
+    ///         latency) while keeping execution-time pricing — the price is still
+    ///         a fresh, keeper-signed value applied in the same tx as the fill.
+    function executeSignedOrderWithPrice(
+        Order calldata o, bytes calldata orderSig,
+        uint256 price, uint256 timestamp, bytes calldata priceSig
+    ) external nonReentrant onlyKeeper {
+        oracle.applySignedPrice(o.marketId, price, timestamp, priceSig);
+        _executeSignedOrder(o, orderSig);
+    }
+
+    function _executeSignedOrder(Order calldata o, bytes calldata sig) internal {
         require(block.timestamp <= o.deadline, "expired");
         require(o.nonce == orderNonce[o.owner], "bad nonce");
         address signer = ECDSA.recover(hashOrder(o), sig);

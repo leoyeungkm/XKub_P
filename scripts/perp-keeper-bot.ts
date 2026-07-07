@@ -240,26 +240,33 @@ async function signPrice(oracle: any, signer: any, marketId: string, price: bigi
 // ─── Gasless relayer (HTTP) ────────────────────────────────────────────────────
 // Accepts agent-signed orders from the frontend and submits them on-chain,
 // paying the gas. The trader never needs KUB. CORS-open for the dapp.
-// Post a fresh price for one market right before executing an order. The keeper
-// posts conditionally (idle → no post), so the on-chain price can be stale when
-// a gasless order arrives; without this, executeSignedOrder reverts "stale price".
-async function postFreshPrice(oracle: any, marketId: string, maxDeviationBps: bigint) {
-  // Always post a fresh price right before execution — this is the anti-arbitrage
-  // guarantee (execution-time pricing). We never let an order execute against a
-  // lagging on-chain price, even a small lag, because that lag IS the edge a timer
-  // would extract from the LP pool.
-  const prices = latestPrices ?? await fetchPrices();
+// Walk every market's on-chain price to the real CEX value in ≤maxDeviationBps
+// steps. Deploy seeds placeholders (e.g. BTC $100k), which would otherwise block
+// the first order (applySignedPrice caps a single move at maxSignedDeviationBps).
+async function initPricesToReal(oracle: any, maxDeviationBps: bigint) {
+  const prices = await fetchPrices();
   latestPrices = prices;
-  const sym = ethers.decodeBytes32String(marketId) as Sym;
-  const cex = toWei(prices[sym]);
-  const [last] = await oracle.peekPrice(marketId);
-  const value = step(last, cex, maxDeviationBps);
-  await (await oracle.setPrices([marketId], [value])).wait();
-  lastPostAt = Date.now();
-  console.log(`[${now()}] pre-exec price ${sym}=$${Number(ethers.formatEther(value)).toFixed(sym === "KUB" ? 4 : 0)}`);
+  for (let iter = 0; iter < 25; iter++) {
+    const ids: string[] = [];
+    const vals: bigint[] = [];
+    let done = true;
+    for (const sym of MARKETS) {
+      const id = ethers.encodeBytes32String(sym);
+      const [last] = await oracle.peekPrice(id);
+      const cex = toWei(prices[sym]);
+      const v = step(last, cex, maxDeviationBps);
+      if (last === 0n || ((cex > last ? cex - last : last - cex) * 10000n) / last > 50n) done = false;
+      ids.push(id);
+      vals.push(v);
+    }
+    await (await oracle.setPrices(ids, vals)).wait();
+    if (done) break;
+  }
+  console.log(`[${now()}] oracle initialised to real prices: ` +
+    MARKETS.map((s) => `${s}=$${Number(prices[s]).toFixed(s === "KUB" ? 4 : 0)}`).join(" "));
 }
 
-function startRelayer(router: any, oracle: any, maxDeviationBps: bigint) {
+function startRelayer(router: any, oracle: any, maxDeviationBps: bigint, keeperSigner: any) {
   const submitted = new Set<string>(); // simple in-flight/replay guard
   const server = http.createServer(async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -287,14 +294,22 @@ function startRelayer(router: any, oracle: any, maxDeviationBps: bigint) {
         if (submitted.has(key)) { res.writeHead(409); return res.end(JSON.stringify({ error: "duplicate" })); }
         submitted.add(key); // in-flight guard; the on-chain nonce is the real replay protection
         try {
-          // Refresh the oracle for this market so execution doesn't hit "stale
-          // price" (skipped internally when the price is already fresh).
-          await postFreshPrice(oracle, o.marketId, maxDeviationBps);
-          // Sending awaits the pre-flight gas estimation (which reverts on stale/
-          // slippage/bad-sig), so returning the hash now — without waiting for the
-          // block — is safe and cuts perceived latency by a full block.
-          const tx = await router.executeSignedOrder(o, sig);
-          console.log(`[${now()}] relayed ${o.isIncrease ? "open" : "close"} for ${o.owner} #${o.nonce} (${tx.hash})`);
+          // ONE tx: sign a fresh price and apply+execute atomically. This keeps
+          // execution-time pricing (the fill uses a freshly keeper-signed price)
+          // but drops the separate price-post round-trip — ~half the latency.
+          const prices = latestPrices ?? await fetchPrices();
+          latestPrices = prices;
+          const sym = ethers.decodeBytes32String(o.marketId) as Sym;
+          const value = toWei(prices[sym]);
+          // Timestamp a few seconds back so it's ≤ chain time (oracle requires
+          // timestamp ≤ block.timestamp, ≤ maxSignedAge=30s).
+          const ts = Math.floor(Date.now() / 1000) - 3;
+          const priceSig = await signPrice(oracle, keeperSigner, o.marketId, value, ts);
+          // Sending awaits pre-flight gas estimation (reverts on bad sig / slippage
+          // / bad price), so returning the hash now — without waiting for the block
+          // — is safe and cuts perceived latency by a full block.
+          const tx = await router.executeSignedOrderWithPrice(o, sig, value, ts, priceSig);
+          console.log(`[${now()}] relayed ${o.isIncrease ? "open" : "close"} ${sym} for ${o.owner} #${o.nonce} @ $${Number(ethers.formatEther(value)).toFixed(sym === "KUB" ? 4 : 0)} (${tx.hash})`);
           res.writeHead(200, { "content-type": "application/json" });
           res.end(JSON.stringify({ ok: true, txHash: tx.hash }));
           tx.wait().catch(() => submitted.delete(key)); // if it reverts on-chain, allow a retry
@@ -329,8 +344,6 @@ async function main() {
   // Safety margin below the on-chain cap (race with a second keeper)
   const maxDeviationBps = ((await oracle.maxDeviationBps()) * 9n) / 10n;
 
-  startRelayer(router, oracle, maxDeviationBps); // gasless: accept agent-signed orders over HTTP
-
   // Fast off-chain price refresh (no gas): keeps latestPrices — hence /prices and
   // the UI's live mark/PnL — moving every few seconds, independent of the slower
   // on-chain posting loop below.
@@ -339,6 +352,13 @@ async function main() {
   };
   await refreshTicker();
   setInterval(refreshTicker, 5000);
+
+  // A fresh deployment seeds the oracle with placeholder prices; walk them to the
+  // real value on startup (each step ≤ maxDeviationBps) so the first order isn't
+  // rejected for "signed deviation too high". Self-heals every (re)deploy.
+  await initPricesToReal(oracle, maxDeviationBps);
+
+  startRelayer(router, oracle, maxDeviationBps, keeper); // gasless: accept agent-signed orders over HTTP
 
   // eslint-disable-next-line no-constant-condition
   while (true) {

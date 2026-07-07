@@ -24,6 +24,19 @@ import * as path from "path";
 const E18 = 10n ** 18n;
 const usd = (n: number) => BigInt(Math.round(n * 1e6)) * (E18 / 10n ** 6n);
 
+// Live prices to seed the oracle at deploy (BTC/ETH Binance, KUB Bitkub THB→USD).
+async function fetchSeedPrices(): Promise<Record<string, number>> {
+  const j = async (u: string) => (await fetch(u, { signal: AbortSignal.timeout(8000) })).json();
+  const [btc, eth, kubThb, usdtThb] = await Promise.all([
+    j("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"),
+    j("https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT"),
+    j("https://api.bitkub.com/api/v3/market/ticker?sym=KUB_THB"),
+    j("https://api.bitkub.com/api/v3/market/ticker?sym=USDT_THB"),
+  ]);
+  const usdt = Number(usdtThb?.[0]?.last);
+  return { BTC: Number(btc.price), ETH: Number(eth.price), KUB: usdt > 0 ? Number(kubThb?.[0]?.last) / usdt : 0 };
+}
+
 // Mock KUSDT from the 2026-05-26 kubTestnet deployment
 const TESTNET_MOCK_KUSDT = "0xB16F025234661aFE6Ab43EEEE8e5a688122C3D0c";
 
@@ -143,6 +156,32 @@ async function main() {
     await (await oracle.forceSetPrice(id, usd(m.seedPrice))).wait();
     await (await market.listMarket(id, m.maxLeverageX, m.maxOiUsd, m.borrowRateFactorBps)).wait();
     console.log(`Listed ${m.symbol}: ${m.maxLeverageX}x, OI cap ${ethers.formatEther(m.maxOiUsd)} USD, seed $${m.seedPrice}`);
+  }
+
+  // On any live (non-local, non-mainnet) network: overwrite the placeholder seed
+  // with a real price and seed LP, so the market is tradable immediately. Without
+  // this the pool is empty ("pool underfunded" on close) and the oracle sits far
+  // from spot ("signed deviation too high" on the first order).
+  if (!isLocal && network.name !== "kubMainnet") {
+    try {
+      const real = await fetchSeedPrices();
+      for (const m of markets) {
+        if (real[m.symbol] > 0) {
+          await (await oracle.forceSetPrice(ethers.encodeBytes32String(m.symbol), usd(real[m.symbol]))).wait();
+        }
+      }
+      console.log(`Oracle seeded live: ${markets.map((m) => `${m.symbol}=$${real[m.symbol]}`).join(" ")}`);
+    } catch (e) {
+      console.log(`live price seed skipped (${(e as Error).message}) — keeper will walk prices on startup`);
+    }
+    const kusdt = await ethers.getContractAt("MockERC20", kusdtAddress);
+    const seedAmt = usd(100_000);
+    if ((await kusdt.balanceOf(deployer.address)) < seedAmt) {
+      try { await (await kusdt.mint(deployer.address, usd(200_000))).wait(); } catch { /* not mintable */ }
+    }
+    await (await kusdt.approve(await pool.getAddress(), ethers.MaxUint256)).wait();
+    await (await pool.deposit(seedAmt)).wait();
+    console.log(`LP seeded 100k — pool value: ${ethers.formatEther(await pool.poolValueUsd())} USD`);
   }
 
   // ─── Smoke test via the router (local only) ────────────────────────────────

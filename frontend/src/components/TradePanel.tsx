@@ -23,7 +23,17 @@ const SLIPPAGE_OPTS = [
   { label: "No limit", bps: 0n },
 ];
 
-const COST_PRESETS = [10, 20, 50, 100];
+// Position-size quick-picks as fractions of the max (available × leverage):
+// e.g. $1000 @ 40x → 40k(Max) / 30k / 15k / 10k.
+const SIZE_RATIOS = [0.25, 0.375, 0.75];
+// Round DOWN to ~2 significant figures so presets read cleanly and never exceed max.
+const niceFloor = (n: number) => {
+  if (!(n > 0)) return 0;
+  const mag = Math.pow(10, Math.floor(Math.log10(n)) - 1);
+  return Math.floor(n / mag) * mag;
+};
+const fmtK = (n: number) =>
+  n >= 1000 ? `${(n / 1000).toFixed(n % 1000 === 0 || n >= 10000 ? 0 : 1)}K` : String(Math.round(n));
 
 export default function TradePanel({ symbol }: { symbol: string }) {
   const { address } = useAccount();
@@ -331,19 +341,26 @@ export default function TradePanel({ symbol }: { symbol: string }) {
             <span className="eyebrow">{mode === "size" && unit === "asset" ? symbol : "USD"}</span>
           </div>
 
-          {(mode === "cost" || unit === "usd") && (
-            <div className="mt-1.5 grid grid-cols-5 gap-1">
-              {COST_PRESETS.map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setAmount(String(v))}
-                  className="tnum rounded bg-panel2 py-1.5 text-[11.5px] text-muted transition-colors hover:text-fg"
-                >
-                  ${v}
-                </button>
-              ))}
+          {(mode === "cost" || unit === "usd") && maxLongUsd > 0 && (
+            <div className="mt-1.5 grid grid-cols-4 gap-1">
+              {/* Position-size picks based on the user's funds & leverage. Clicking
+                  sets the order size (collateral = size / leverage). */}
+              {SIZE_RATIOS.map((r) => {
+                const pos = niceFloor(maxLongUsd * r);
+                return (
+                  <button
+                    key={r}
+                    onClick={() => { setMode("size"); setUnit("usd"); setAmount(String(pos)); }}
+                    title={`${fmtNum(pos)} USD 倉位`}
+                    className="tnum rounded bg-panel2 py-1.5 text-[11.5px] text-muted transition-colors hover:text-fg"
+                  >
+                    {fmtK(pos)}
+                  </button>
+                );
+              })}
               <button
-                onClick={() => setAmount(String(Math.floor((mode === "cost" ? availableUsd : maxLongUsd) * 100) / 100))}
+                onClick={() => { setMode("size"); setUnit("usd"); setAmount(String(niceFloor(maxLongUsd))); }}
+                title={`Max ${fmtNum(niceFloor(maxLongUsd))} USD 倉位`}
                 className="tnum rounded bg-panel2 py-1.5 text-[11.5px] text-accent transition-colors hover:opacity-80"
               >
                 Max

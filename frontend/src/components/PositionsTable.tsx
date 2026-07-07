@@ -1,8 +1,9 @@
 "use client";
 
-import { useAccount, usePublicClient, useReadContracts, useWriteContract, useReadContract } from "wagmi";
+import { useAccount, usePublicClient, useReadContracts, useReadContract } from "wagmi";
 import toast from "react-hot-toast";
 import { ADDR, E18, MARKETS, b32, marketAbi, oracleAbi, routerAbi } from "@/config/contracts";
+import { useKubWrite } from "@/lib/kubWrite";
 import { errMsg, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
 
@@ -14,7 +15,7 @@ const COMBOS = MARKETS.flatMap((m) => [
 export default function PositionsTable() {
   const { address } = useAccount();
   const client = usePublicClient();
-  const { writeContractAsync } = useWriteContract();
+  const { writeContract } = useKubWrite();
   const oneClick = useOneClick();
 
   const { data: minExecFee } = useReadContract({
@@ -68,7 +69,7 @@ export default function PositionsTable() {
       }
 
       toast("Submitting close…");
-      const hash = await writeContractAsync({
+      const hash = await writeContract({
         address: ADDR.router, abi: routerAbi, functionName: "createDecreaseRequest",
         args: [b32(symbol), isLong, sizeUsd, acceptable],
         value: fee,

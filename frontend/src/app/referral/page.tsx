@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useAccount, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useReadContracts } from "wagmi";
+import { useKubWrite } from "@/lib/kubWrite";
 import { formatEther } from "viem";
 import toast from "react-hot-toast";
 import {
@@ -63,7 +64,7 @@ const shortAddr = (a: string) => a.slice(0, 6) + "…" + a.slice(-4);
 
 export default function Referral() {
   const { address, isConnected } = useAccount();
-  const { writeContractAsync } = useWriteContract();
+  const { writeContract } = useKubWrite();
   const client = usePublicClient();
   const enabled = !!ADDR.referral;
 
@@ -121,7 +122,7 @@ export default function Referral() {
   const register = () => {
     const c = clean(newCode);
     if (c.length < 3) return toast.error("Code needs 3+ characters");
-    run(() => writeContractAsync({ address: ADDR.referral!, abi: referralAbi, functionName: "registerCode", args: [b32(c)] }), `Code ${c} registered`);
+    run(() => writeContract({ address: ADDR.referral!, abi: referralAbi, functionName: "registerCode", args: [b32(c)] }), `Code ${c} registered`);
   };
   const bind = () => {
     const c = clean(bindCode);
@@ -129,10 +130,10 @@ export default function Referral() {
     run(async () => {
       const owner = await client!.readContract({ address: ADDR.referral!, abi: referralAbi, functionName: "codeOwner", args: [b32(c)] });
       if (owner === "0x0000000000000000000000000000000000000000") throw new Error("Unknown code");
-      return writeContractAsync({ address: ADDR.referral!, abi: referralAbi, functionName: "setReferrer", args: [b32(c)] });
+      return writeContract({ address: ADDR.referral!, abi: referralAbi, functionName: "setReferrer", args: [b32(c)] });
     }, `Now trading under ${c}`).then((ok) => { if (ok) localStorage.removeItem(PENDING_REF_KEY); });
   };
-  const claim = () => run(() => writeContractAsync({ address: ADDR.referral!, abi: referralAbi, functionName: "claim" }), "Rewards claimed");
+  const claim = () => run(() => writeContract({ address: ADDR.referral!, abi: referralAbi, functionName: "claim" }), "Rewards claimed");
 
   const shareLink = myCode && typeof window !== "undefined" ? `${window.location.origin}/?ref=${myCode}` : "";
   const rebatePct = rebateBps !== undefined ? Number(rebateBps) / 100 : 10;

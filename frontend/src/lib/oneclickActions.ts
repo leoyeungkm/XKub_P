@@ -4,10 +4,11 @@
 // onboarding modal, the status panel, and the portfolio page.
 import { useState } from "react";
 import { parseEther } from "viem";
-import { usePublicClient, useSendTransaction, useWriteContract } from "wagmi";
+import { usePublicClient } from "wagmi";
 import toast from "react-hot-toast";
 import { ADDR, erc20Abi, routerAbi, usdToToken } from "@/config/contracts";
 import { errMsg } from "@/lib/format";
+import { useKubWrite } from "@/lib/kubWrite";
 import { clearAgentKey, ensureAgentAccount, useOneClick } from "@/lib/oneclick";
 
 export const GAS_TOPUP = parseEther("0.2");
@@ -15,8 +16,7 @@ export const GAS_TOPUP = parseEther("0.2");
 export function useOneClickActions() {
   const oc = useOneClick();
   const client = usePublicClient();
-  const { writeContractAsync } = useWriteContract();
-  const { sendTransactionAsync } = useSendTransaction();
+  const { writeContract, sendTransaction } = useKubWrite();
   const [busy, setBusy] = useState(false);
 
   const enable = async () => {
@@ -25,14 +25,14 @@ export function useOneClickActions() {
     try {
       const agent = ensureAgentAccount(oc.owner);
       toast("Authorising agent key…");
-      const h = await writeContractAsync({
+      const h = await writeContract({
         address: ADDR.router, abi: routerAbi, functionName: "setAgent",
         args: [agent.address, true],
       });
       await client.waitForTransactionReceipt({ hash: h });
       if (oc.agentGas < GAS_TOPUP / 2n) {
         toast("Funding agent gas…");
-        const h2 = await sendTransactionAsync({ to: agent.address, value: GAS_TOPUP });
+        const h2 = await sendTransaction({ to: agent.address, value: GAS_TOPUP });
         await client.waitForTransactionReceipt({ hash: h2 });
       }
       toast.success("1-Click trading enabled");
@@ -50,7 +50,7 @@ export function useOneClickActions() {
     if (!oc.owner || !oc.agentAddr || !client) return;
     setBusy(true);
     try {
-      const h = await writeContractAsync({
+      const h = await writeContract({
         address: ADDR.router, abi: routerAbi, functionName: "setAgent",
         args: [oc.agentAddr, false],
       });
@@ -79,14 +79,14 @@ export function useOneClickActions() {
         });
         if (allowance < tokens) {
           toast("Approving KUSDT…");
-          const h = await writeContractAsync({
+          const h = await writeContract({
             address: ADDR.kusdt, abi: erc20Abi, functionName: "approve",
             args: [ADDR.router, 2n ** 256n - 1n],
           });
           await client.waitForTransactionReceipt({ hash: h });
         }
       }
-      const h = await writeContractAsync({
+      const h = await writeContract({
         address: ADDR.router, abi: routerAbi, functionName: fn, args: [tokens],
       });
       await client.waitForTransactionReceipt({ hash: h });
@@ -105,7 +105,7 @@ export function useOneClickActions() {
     if (!oc.agentAddr || !client) return;
     setBusy(true);
     try {
-      const h = await sendTransactionAsync({ to: oc.agentAddr, value: GAS_TOPUP });
+      const h = await sendTransaction({ to: oc.agentAddr, value: GAS_TOPUP });
       await client.waitForTransactionReceipt({ hash: h });
       toast.success("Agent gas topped up");
     } catch (e) {

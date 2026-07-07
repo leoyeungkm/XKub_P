@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { parseEther, formatEther } from "viem";
-import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useReadContract } from "wagmi";
+import { useKubWrite } from "@/lib/kubWrite";
 import toast from "react-hot-toast";
 import {
   ADDR, MARKETS, b32, erc20Abi, marketAbi, routerAbi, usdToToken, tokenToUsd,
@@ -26,7 +27,7 @@ const COST_PRESETS = [10, 20, 50, 100];
 export default function TradePanel({ symbol }: { symbol: string }) {
   const { address } = useAccount();
   const client = usePublicClient();
-  const { writeContractAsync } = useWriteContract();
+  const { writeContract } = useKubWrite();
   const oraclePrice = useOraclePrice(symbol);
   const price = useDisplayPrice(symbol, oraclePrice); // live CEX for preview, oracle fallback
   const fees = useMarketFees(symbol);
@@ -170,7 +171,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
       });
       if (allowance < collateralTokens) {
         toast("Approving KUSDT…");
-        const h = await writeContractAsync({
+        const h = await writeContract({
           address: ADDR.kusdt, abi: erc20Abi, functionName: "approve",
           args: [ADDR.router, 2n ** 256n - 1n],
         });
@@ -178,7 +179,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
       }
 
       toast("Submitting order…");
-      const hash = await writeContractAsync({
+      const hash = await writeContract({
         address: ADDR.router, abi: routerAbi, functionName: "createIncreaseRequest",
         args: [b32(symbol), isLong, collateralTokens, sizeUsd18, acceptable],
         value: fee,

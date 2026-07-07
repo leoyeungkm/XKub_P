@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatEther } from "viem";
-import { useAccount, usePublicClient, useReadContract, useReadContracts, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useReadContract, useReadContracts } from "wagmi";
 import toast from "react-hot-toast";
 import { ADDR, b32, parseB32, routerAbi, triggerKey } from "@/config/contracts";
+import { useKubWrite } from "@/lib/kubWrite";
 import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
 import { gaslessAvailable, submitGaslessOrder } from "@/lib/gasless";
@@ -17,7 +18,7 @@ type Tab = "positions" | "orders" | "history";
 export default function ActivityPanel() {
   const { address } = useAccount();
   const client = usePublicClient();
-  const { writeContractAsync } = useWriteContract();
+  const { writeContract } = useKubWrite();
   const oneClick = useOneClick();
   const positions = usePositions();
   const { data: history } = useHistory();
@@ -55,7 +56,7 @@ export default function ActivityPanel() {
         toast.success("Close queued (1-click)");
         return;
       }
-      const hash = await writeContractAsync({
+      const hash = await writeContract({
         address: ADDR.router, abi: routerAbi, functionName: "createDecreaseRequest",
         args: [b32(p.symbol), p.isLong, p.sizeUsd, acceptable], value: fee,
       });
@@ -203,7 +204,7 @@ function PositionsView({ rows, onClose }: { rows: PositionRow[]; onClose: (p: Po
 function usePendingOrders() {
   const { address } = useAccount();
   const client = usePublicClient();
-  const { writeContractAsync } = useWriteContract();
+  const { writeContract } = useKubWrite();
 
   const { data: rows = [], refetch } = useQuery({
     queryKey: ["activityPending", address],
@@ -227,7 +228,7 @@ function usePendingOrders() {
   const cancel = async (id: bigint) => {
     if (!client) return;
     try {
-      const hash = await writeContractAsync({ address: ADDR.router, abi: routerAbi, functionName: "cancelRequest", args: [id] });
+      const hash = await writeContract({ address: ADDR.router, abi: routerAbi, functionName: "cancelRequest", args: [id] });
       await client.waitForTransactionReceipt({ hash });
       toast.success("已取消並退款");
       refetch();

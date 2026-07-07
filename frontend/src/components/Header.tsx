@@ -2,8 +2,9 @@
 
 import {
   useAccount, useBalance, useConnect, useDisconnect, useReadContract,
-  useWriteContract, usePublicClient,
+  usePublicClient,
 } from "wagmi";
+import { useKubWrite } from "@/lib/kubWrite";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import toast from "react-hot-toast";
@@ -18,7 +19,7 @@ export default function Header() {
   const { address, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
-  const { writeContractAsync } = useWriteContract();
+  const { writeContract } = useKubWrite();
   const client = usePublicClient();
   const pathname = usePathname();
 
@@ -37,7 +38,7 @@ export default function Header() {
   const faucet = async () => {
     if (!address) return toast.error("Connect wallet first");
     try {
-      const hash = await writeContractAsync({
+      const hash = await writeContract({
         address: ADDR.kusdt,
         abi: erc20Abi,
         functionName: "mint",

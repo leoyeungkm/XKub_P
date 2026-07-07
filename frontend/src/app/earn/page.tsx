@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { formatEther, parseEther } from "viem";
-import { useAccount, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useReadContracts } from "wagmi";
+import { useKubWrite } from "@/lib/kubWrite";
 import toast from "react-hot-toast";
 import { ADDR, E18, erc20Abi, marketAbi, poolAbi, usdToToken, tokenToUsd } from "@/config/contracts";
 import { errMsg, fmtNum, fmtUsd } from "@/lib/format";
@@ -10,7 +11,7 @@ import { errMsg, fmtNum, fmtUsd } from "@/lib/format";
 export default function Earn() {
   const { address, isConnected } = useAccount();
   const client = usePublicClient();
-  const { writeContractAsync } = useWriteContract();
+  const { writeContract } = useKubWrite();
   const [amount, setAmount] = useState("");
   const [tab, setTab] = useState<"deposit" | "withdraw">("deposit");
   const [busy, setBusy] = useState(false);
@@ -65,14 +66,14 @@ export default function Earn() {
         });
         if (allowance < tokens) {
           toast("Approving KUSDT…");
-          const h = await writeContractAsync({ address: ADDR.kusdt, abi: erc20Abi, functionName: "approve", args: [ADDR.pool, 2n ** 256n - 1n] });
+          const h = await writeContract({ address: ADDR.kusdt, abi: erc20Abi, functionName: "approve", args: [ADDR.pool, 2n ** 256n - 1n] });
           await client.waitForTransactionReceipt({ hash: h });
         }
-        const h = await writeContractAsync({ address: ADDR.pool, abi: poolAbi, functionName: "deposit", args: [tokens] });
+        const h = await writeContract({ address: ADDR.pool, abi: poolAbi, functionName: "deposit", args: [tokens] });
         await client.waitForTransactionReceipt({ hash: h });
         toast.success("Deposited");
       } else {
-        const h = await writeContractAsync({ address: ADDR.pool, abi: poolAbi, functionName: "withdraw", args: [amt18] });
+        const h = await writeContract({ address: ADDR.pool, abi: poolAbi, functionName: "withdraw", args: [amt18] });
         await client.waitForTransactionReceipt({ hash: h });
         toast.success("Withdrawn");
       }

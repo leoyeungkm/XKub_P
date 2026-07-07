@@ -1,9 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useAccount, usePublicClient, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient } from "wagmi";
 import toast from "react-hot-toast";
 import { ADDR, parseB32, routerAbi } from "@/config/contracts";
+import { useKubWrite } from "@/lib/kubWrite";
 import { errMsg, fmtUsd } from "@/lib/format";
 
 type Req = {
@@ -17,7 +18,7 @@ type Req = {
 export default function RequestsTable() {
   const { address } = useAccount();
   const client = usePublicClient();
-  const { writeContractAsync } = useWriteContract();
+  const { writeContract } = useKubWrite();
 
   const { data: rows = [], refetch } = useQuery({
     queryKey: ["pendingRequests", address],
@@ -46,7 +47,7 @@ export default function RequestsTable() {
   const cancel = async (id: bigint) => {
     if (!client) return;
     try {
-      const hash = await writeContractAsync({
+      const hash = await writeContract({
         address: ADDR.router, abi: routerAbi, functionName: "cancelRequest", args: [id],
       });
       await client.waitForTransactionReceipt({ hash });

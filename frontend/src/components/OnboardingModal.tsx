@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import { formatEther, parseEther } from "viem";
 import { useAccount, useChainId, usePublicClient, useReadContract, useSwitchChain, useWriteContract } from "wagmi";
 import toast from "react-hot-toast";
-import { ADDR, b32, chain, erc20Abi, referralAbi, routerAbi, tokenToUsd, usdToToken } from "@/config/contracts";
+import { ADDR, b32, chain, erc20Abi, kubTxOverrides, referralAbi, routerAbi, tokenToUsd, usdToToken } from "@/config/contracts";
 import { errMsg, fmtNum } from "@/lib/format";
 import { GAS_TOPUP } from "@/lib/oneclickActions";
 import { ensureAgentAccount, useOneClick } from "@/lib/oneclick";
@@ -97,6 +97,8 @@ export default function OnboardingModal() {
       const agent = ensureAgentAccount(address);
       const n = Number(amount || "0");
       const tokens = n > 0 ? usdToToken(parseEther(String(n))) : 0n;
+      // KUB is legacy-only; force Type-0 or OKX/MetaMask txs get dropped silently.
+      const fees = await kubTxOverrides(client);
 
       if (tokens > 0) {
         const allowance = await client.readContract({
@@ -106,6 +108,7 @@ export default function OnboardingModal() {
           toast("Approving KUSDT…");
           const h = await writeContractAsync({
             address: ADDR.kusdt, abi: erc20Abi, functionName: "approve", args: [ADDR.router, 2n ** 256n - 1n],
+            ...fees,
           });
           await client.waitForTransactionReceipt({ hash: h, timeout: 90_000 });
         }
@@ -116,7 +119,7 @@ export default function OnboardingModal() {
       const code = ADDR.referral && !hasCode && refCode.length >= 3 ? b32(refCode) : ZERO32;
       const h = await writeContractAsync({
         address: ADDR.router, abi: routerAbi, functionName: "setupAccount",
-        args: [agent.address, tokens, code], value: gas,
+        args: [agent.address, tokens, code], value: gas, ...fees,
       });
       await client.waitForTransactionReceipt({ hash: h, timeout: 90_000 });
       toast.success("設定完成，開始交易");

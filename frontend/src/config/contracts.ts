@@ -123,6 +123,24 @@ export const routerAbi = parseAbi([
 
 export const RELAYER_URL = (CFG as { relayerUrl?: string }).relayerUrl ?? "";
 
+// KUB Chain has NO EIP-1559 — its blocks carry no baseFeePerGas. Wallets like
+// OKX/MetaMask default to Type-2 (EIP-1559) txs, which this node silently drops
+// (the wallet still returns a hash, so the dapp hangs waiting for a receipt that
+// never comes). Force legacy (Type-0) with an explicit gasPrice on every write
+// that goes through a user's injected wallet.
+export async function kubTxOverrides(
+  client: { getGasPrice: () => Promise<bigint> },
+): Promise<{ type: "legacy"; gasPrice: bigint }> {
+  let gasPrice: bigint;
+  try {
+    gasPrice = await client.getGasPrice();
+  } catch {
+    gasPrice = 60_000_000_000n; // 60 gwei fallback (testnet min ~50)
+  }
+  // 15% headroom so a tick-up between quote and mine doesn't strand the tx.
+  return { type: "legacy", gasPrice: (gasPrice * 115n) / 100n };
+}
+
 // keccak256(abi.encodePacked(owner, marketId, isLong)) — matches the router
 export const triggerKey = (owner: `0x${string}`, symbol: string, isLong: boolean): Hex => {
   const packed = (owner.slice(2) + b32(symbol).slice(2) + (isLong ? "01" : "00")).toLowerCase();

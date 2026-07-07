@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { formatEther, parseEther } from "viem";
-import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useReadContract } from "wagmi";
 import toast from "react-hot-toast";
 import { ADDR, b32, routerAbi, triggerKey } from "@/config/contracts";
+import { useKubWrite } from "@/lib/kubWrite";
 import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
 import type { PositionRow } from "@/lib/portfolio";
@@ -15,7 +16,7 @@ const SL_PRESETS = [10, 30, 50, 70];           // loss % of collateral
 export default function TpSlModal({ pos, onClose }: { pos: PositionRow; onClose: () => void }) {
   const { address } = useAccount();
   const client = usePublicClient();
-  const { writeContractAsync } = useWriteContract();
+  const { writeContract } = useKubWrite();
   const oneClick = useOneClick();
 
   const entry = Number(formatEther(pos.entry));
@@ -77,7 +78,7 @@ export default function TpSlModal({ pos, onClose }: { pos: PositionRow; onClose:
         });
         await client.waitForTransactionReceipt({ hash });
       } else {
-        const hash = await writeContractAsync({
+        const hash = await writeContract({
           address: ADDR.router, abi: routerAbi, functionName: "setTrigger",
           args: [b32(pos.symbol), pos.isLong, tpWei, slWei], value: fee,
         });
@@ -105,7 +106,7 @@ export default function TpSlModal({ pos, onClose }: { pos: PositionRow; onClose:
         });
         await client.waitForTransactionReceipt({ hash });
       } else {
-        const hash = await writeContractAsync({
+        const hash = await writeContract({
           address: ADDR.router, abi: routerAbi, functionName: "cancelTrigger",
           args: [b32(pos.symbol), pos.isLong],
         });

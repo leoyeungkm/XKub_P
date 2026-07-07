@@ -99,6 +99,9 @@ async function main() {
   await (await market.setRouter(await router.getAddress())).wait();
   await (await market.setReferral(await referral.getAddress())).wait();
   await (await referral.setMarket(await market.getAddress())).wait();
+  // One-tx onboarding: let the router register referral codes for users
+  await (await router.setReferral(await referral.getAddress())).wait();
+  await (await referral.setRegistrar(await router.getAddress(), true)).wait();
   // directTradingEnabled stays FALSE — all orders go through the router
 
   // ─── Protocol revenue + VIP fee tiers ───────────────────────────────────────

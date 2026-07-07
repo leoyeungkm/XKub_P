@@ -48,6 +48,10 @@ import "./IXKubPerp.sol";
   on bad trades but can never move funds out.
 */
 
+interface IXKubReferralRegistrar {
+    function registerCodeFor(address owner, bytes32 code) external;
+}
+
 interface IXKubPerpMarketRouted {
     function increasePositionFor(address owner, bytes32 marketId, bool isLong, uint256 collateralTokens, uint256 sizeDeltaUsd) external;
     function decreasePositionFor(address owner, bytes32 marketId, bool isLong, uint256 sizeDeltaUsd) external;
@@ -84,6 +88,7 @@ contract XKubPerpRouter is ReentrancyGuard {
     IXKubPriceOracle public immutable oracle;
 
     address public admin;
+    address public referral; // optional, for one-tx referral registration
     mapping(address => bool) public isKeeper;
 
     Request[] public requests;
@@ -202,11 +207,12 @@ contract XKubPerpRouter is ReentrancyGuard {
         emit AgentSet(msg.sender, agent, allowed);
     }
 
-    /// @notice One-tx onboarding: authorise an agent, deposit collateral, and
-    ///         fund the agent's gas — all in a single wallet confirmation
-    ///         (works on any wallet, no EIP-5792 needed). Approve KUSDT first
-    ///         if depositTokens > 0.
-    function setupAccount(address agent, uint256 depositTokens) external payable nonReentrant {
+    /// @notice One-tx onboarding: authorise an agent, deposit collateral, fund
+    ///         the agent's gas, and (optionally) register a referral code — all
+    ///         in a single wallet confirmation (works on any wallet, no
+    ///         EIP-5792 needed). Approve KUSDT first if depositTokens > 0.
+    ///         referralCode = 0 to skip registration.
+    function setupAccount(address agent, uint256 depositTokens, bytes32 referralCode) external payable nonReentrant {
         require(agent != address(0) && agent != msg.sender, "!agent");
         isAgent[msg.sender][agent] = true;
         emit AgentSet(msg.sender, agent, true);
@@ -215,7 +221,14 @@ contract XKubPerpRouter is ReentrancyGuard {
             collateralBalance[msg.sender] += depositTokens;
             emit CollateralDeposited(msg.sender, depositTokens);
         }
+        if (referralCode != bytes32(0) && referral != address(0)) {
+            IXKubReferralRegistrar(referral).registerCodeFor(msg.sender, referralCode);
+        }
         if (msg.value > 0) _payNative(agent, msg.value); // gas for the agent
+    }
+
+    function setReferral(address _referral) external onlyAdmin {
+        referral = _referral;
     }
 
     /// @notice Agent entry: open/increase for `owner`. Collateral comes from the

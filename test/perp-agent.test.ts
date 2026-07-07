@@ -75,11 +75,24 @@ describe("XKub Perp — agent one-click trading", () => {
   it("setupAccount enables agent, deposits and funds gas in one tx", async () => {
     const { router, kusdt, owner, agent } = await loadFixture(deployFixture);
     const agentGasBefore = await ethers.provider.getBalance(agent.address);
-    await router.connect(owner).setupAccount(agent.address, usd(5_000), { value: ethers.parseEther("0.2") });
+    const NO_CODE = ethers.ZeroHash;
+    await router.connect(owner).setupAccount(agent.address, usd(5_000), NO_CODE, { value: ethers.parseEther("0.2") });
 
     expect(await router.isAgent(owner.address, agent.address)).to.equal(true);
     expect(await router.collateralBalance(owner.address)).to.equal(usd(5_000));
     expect(await ethers.provider.getBalance(agent.address)).to.equal(agentGasBefore + ethers.parseEther("0.2"));
+  });
+
+  it("setupAccount can also register a referral code in the same tx", async () => {
+    const { router, kusdt, admin, owner, agent } = await loadFixture(deployFixture);
+    const referral = await ethers.deployContract("XKubReferral", [await kusdt.getAddress(), 18, admin.address]);
+    await router.setReferral(await referral.getAddress());
+    await referral.setRegistrar(await router.getAddress(), true);
+
+    const CODE = ethers.encodeBytes32String("LEO");
+    await router.connect(owner).setupAccount(agent.address, usd(1_000), CODE, { value: ethers.parseEther("0.2") });
+    expect(await referral.codeOwner(CODE)).to.equal(owner.address);
+    expect(await referral.ownerCode(owner.address)).to.equal(CODE);
   });
 
   it("setAgent rejects zero address and self", async () => {

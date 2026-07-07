@@ -57,6 +57,8 @@ contract XKubReferral is ReentrancyGuard {
     mapping(address => uint256) public claimableUsd;   // referrer → unclaimed rebate (USD 1e18)
     uint256 public totalRebatedUsd;
 
+    mapping(address => bool) public isRegistrar;       // trusted to register codes for users (e.g. the router)
+
     event CodeRegistered(bytes32 indexed code, address indexed owner);
     event Referred(address indexed trader, bytes32 indexed code, address indexed referrer);
     event RebateAccrued(address indexed referrer, address indexed trader, uint256 usd);
@@ -65,6 +67,7 @@ contract XKubReferral is ReentrancyGuard {
     event ReferredDiscountUpdated(uint256 bps);
     event CodeRebateUpdated(bytes32 indexed code, uint256 bps);
     event MarketSet(address indexed market);
+    event RegistrarSet(address indexed who, bool allowed);
     event AdminChanged(address indexed oldAdmin, address indexed newAdmin);
 
     modifier onlyAdmin() {
@@ -95,6 +98,18 @@ contract XKubReferral is ReentrancyGuard {
         codeOwner[code] = msg.sender;
         ownerCode[msg.sender] = code;
         emit CodeRegistered(code, msg.sender);
+    }
+
+    /// @notice Register a code on a user's behalf (trusted registrar only, e.g.
+    ///         the router's one-tx onboarding). Same rules as registerCode.
+    function registerCodeFor(address owner, bytes32 code) external {
+        require(isRegistrar[msg.sender], "!registrar");
+        require(code != bytes32(0), "!code");
+        require(codeOwner[code] == address(0), "code taken");
+        require(ownerCode[owner] == bytes32(0), "have code");
+        codeOwner[code] = owner;
+        ownerCode[owner] = code;
+        emit CodeRegistered(code, owner);
     }
 
     /// @notice Bind yourself to a referral code. Allowed until your first
@@ -162,6 +177,11 @@ contract XKubReferral is ReentrancyGuard {
         require(market == address(0), "market set");
         market = _market;
         emit MarketSet(_market);
+    }
+
+    function setRegistrar(address who, bool allowed) external onlyAdmin {
+        isRegistrar[who] = allowed;
+        emit RegistrarSet(who, allowed);
     }
 
     function setDefaultRebateBps(uint256 bps) external onlyAdmin {

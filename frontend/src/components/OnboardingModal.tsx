@@ -9,13 +9,15 @@ import { useEffect, useState } from "react";
 import { formatEther, parseEther } from "viem";
 import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import toast from "react-hot-toast";
-import { ADDR, erc20Abi, routerAbi, tokenToUsd, usdToToken } from "@/config/contracts";
+import { ADDR, b32, erc20Abi, referralAbi, routerAbi, tokenToUsd, usdToToken } from "@/config/contracts";
 import { errMsg, fmtNum } from "@/lib/format";
 import { GAS_TOPUP } from "@/lib/oneclickActions";
 import { ensureAgentAccount, useOneClick } from "@/lib/oneclick";
 
 const seenKey = (o: string) => `xkub.onboard.${o.toLowerCase()}`;
 const termsKey = (o: string) => `xkub.terms.${o.toLowerCase()}`;
+const clean = (s: string) => s.toUpperCase().replace(/[^A-Z0-9_]/g, "").slice(0, 31);
+const ZERO32 = "0x0000000000000000000000000000000000000000000000000000000000000000" as const;
 
 export default function OnboardingModal() {
   const { address } = useAccount();
@@ -27,6 +29,7 @@ export default function OnboardingModal() {
   const [step, setStep] = useState(0); // 0 terms · 1 enable+deposit
   const [agreed, setAgreed] = useState(false);
   const [amount, setAmount] = useState("");
+  const [refCode, setRefCode] = useState("");
   const [busy, setBusy] = useState(false);
 
   const { data: walletBal } = useReadContract({
@@ -35,6 +38,13 @@ export default function OnboardingModal() {
     query: { enabled: !!address, refetchInterval: 8000 },
   });
   const walletUsd = walletBal !== undefined ? Number(formatEther(tokenToUsd(walletBal))) : 0;
+
+  const { data: myCodeHex } = useReadContract({
+    address: ADDR.referral, abi: referralAbi, functionName: "ownerCode",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address && !!ADDR.referral },
+  });
+  const hasCode = !!myCodeHex && myCodeHex !== ZERO32;
 
   useEffect(() => {
     if (!address || oc.active) return;
@@ -55,6 +65,7 @@ export default function OnboardingModal() {
   }, [address]);
 
   useEffect(() => { if (address && !amount) setAmount("100"); }, [address, amount]);
+  useEffect(() => { if (address && !refCode) setRefCode(clean(address.slice(2, 8))); }, [address, refCode]);
 
   if (!open || !address) return null;
 
@@ -89,9 +100,10 @@ export default function OnboardingModal() {
 
       toast("Setting up…");
       const gas = oc.agentGas < GAS_TOPUP / 2n ? GAS_TOPUP : 0n;
+      const code = ADDR.referral && !hasCode && refCode.length >= 3 ? b32(refCode) : ZERO32;
       const h = await writeContractAsync({
         address: ADDR.router, abi: routerAbi, functionName: "setupAccount",
-        args: [agent.address, tokens], value: gas,
+        args: [agent.address, tokens, code], value: gas,
       });
       await client.waitForTransactionReceipt({ hash: h });
       toast.success("設定完成，開始交易");
@@ -162,6 +174,17 @@ export default function OnboardingModal() {
                 ))}
               </div>
             </div>
+
+            {ADDR.referral && !hasCode && (
+              <div>
+                <div className="eyebrow mb-1.5">邀請碼（同時生成，可留空）· Referral Code</div>
+                <div className="flex items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent/60">
+                  <input value={refCode} onChange={(e) => setRefCode(clean(e.target.value))} placeholder="YOURCODE"
+                    className="tnum w-full bg-transparent py-2 text-[14px] uppercase tracking-wide outline-none" />
+                </div>
+              </div>
+            )}
+
             <button onClick={enableAndDeposit} disabled={busy}
               className="rounded-md bg-accent py-2.5 text-[14px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40">
               {busy ? "設定中…" : "一鍵啟用並入金"}
@@ -172,7 +195,7 @@ export default function OnboardingModal() {
               暫不入金，只啟用一鍵交易
             </button>
             <p className="text-[11px] leading-relaxed text-mutedDim">
-              首次需額外一次 KUSDT 授權（approve）。想要邀請連結？前往 Referral 頁一鍵生成。
+              授權代理、入金、充 gas、生成邀請碼一筆交易完成。首次需額外一次 KUSDT 授權（approve）。
             </p>
           </div>
         )}

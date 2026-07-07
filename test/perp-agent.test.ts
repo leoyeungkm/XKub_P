@@ -72,6 +72,16 @@ describe("XKub Perp — agent one-click trading", () => {
     await expect(router.connect(owner).withdrawCollateral(usd(1))).to.be.reverted;
   });
 
+  it("setupAccount enables agent, deposits and funds gas in one tx", async () => {
+    const { router, kusdt, owner, agent } = await loadFixture(deployFixture);
+    const agentGasBefore = await ethers.provider.getBalance(agent.address);
+    await router.connect(owner).setupAccount(agent.address, usd(5_000), { value: ethers.parseEther("0.2") });
+
+    expect(await router.isAgent(owner.address, agent.address)).to.equal(true);
+    expect(await router.collateralBalance(owner.address)).to.equal(usd(5_000));
+    expect(await ethers.provider.getBalance(agent.address)).to.equal(agentGasBefore + ethers.parseEther("0.2"));
+  });
+
   it("setAgent rejects zero address and self", async () => {
     const { router, owner, agent } = await loadFixture(deployFixture);
     await expect(router.connect(owner).setAgent(ethers.ZeroAddress, true)).to.be.revertedWith("!agent");

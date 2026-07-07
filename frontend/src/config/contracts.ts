@@ -94,6 +94,7 @@ export const routerAbi = parseAbi([
   "function depositCollateral(uint256 tokens)",
   "function withdrawCollateral(uint256 tokens)",
   "function setAgent(address agent, bool allowed)",
+  "function setupAccount(address agent, uint256 depositTokens) payable",
   "function isAgent(address owner, address agent) view returns (bool)",
   "function collateralBalance(address owner) view returns (uint256)",
   "function createIncreaseRequestFor(address owner, bytes32 marketId, bool isLong, uint256 collateralTokens, uint256 sizeDeltaUsd, uint256 acceptablePrice) payable returns (uint256)",

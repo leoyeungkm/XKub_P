@@ -202,6 +202,22 @@ contract XKubPerpRouter is ReentrancyGuard {
         emit AgentSet(msg.sender, agent, allowed);
     }
 
+    /// @notice One-tx onboarding: authorise an agent, deposit collateral, and
+    ///         fund the agent's gas — all in a single wallet confirmation
+    ///         (works on any wallet, no EIP-5792 needed). Approve KUSDT first
+    ///         if depositTokens > 0.
+    function setupAccount(address agent, uint256 depositTokens) external payable nonReentrant {
+        require(agent != address(0) && agent != msg.sender, "!agent");
+        isAgent[msg.sender][agent] = true;
+        emit AgentSet(msg.sender, agent, true);
+        if (depositTokens > 0) {
+            kusdt.safeTransferFrom(msg.sender, address(this), depositTokens);
+            collateralBalance[msg.sender] += depositTokens;
+            emit CollateralDeposited(msg.sender, depositTokens);
+        }
+        if (msg.value > 0) _payNative(agent, msg.value); // gas for the agent
+    }
+
     /// @notice Agent entry: open/increase for `owner`. Collateral comes from the
     ///         owner's router balance; the executionFee comes from the agent.
     function createIncreaseRequestFor(

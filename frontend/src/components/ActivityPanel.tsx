@@ -267,38 +267,52 @@ function OrdersView({ rows, onCancel }: { rows: ReturnType<typeof usePendingOrde
 
 // ─── History ───────────────────────────────────────────────────────────────
 
+const fmtTime = (ts?: number) => {
+  if (!ts) return "—";
+  const d = new Date(ts * 1000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+};
+
 function HistoryView({ rows }: { rows: HistoryItem[] }) {
   const trades = rows.filter((h) => h.kind === "open" || h.kind === "close" || h.kind === "liquidation");
   if (trades.length === 0) return <Empty>No trade history yet</Empty>;
+  const HEAD = ["時間", "幣種", "數量", "方向", "價格", "成交價值", "初始保證金", "費用", "倉位盈虧", "已實現盈虧"];
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-[12.5px]">
+      <table className="w-full min-w-[840px] text-[12.5px]">
         <thead>
           <tr className="eyebrow text-left">
-            {["區塊", "動作", "幣種", "方向", "數量", "價格", "盈虧"].map((h) => (
-              <th key={h} className="border-b border-line px-3 py-2 font-normal">{h}</th>
-            ))}
+            {HEAD.map((h) => <th key={h} className="whitespace-nowrap border-b border-line px-3 py-2 font-normal">{h}</th>)}
           </tr>
         </thead>
         <tbody>
           {trades.map((h, i) => {
-            const up = (h.pnlUsd ?? 0n) >= 0n;
+            const action = h.kind === "open" ? "開" : h.kind === "close" ? "平" : "強平";
+            const dir = h.isLong === undefined ? "" : h.isLong ? "多" : "空";
+            const tokens = h.sizeUsd && h.price && h.price > 0n
+              ? Number(formatEther(h.sizeUsd)) / Number(formatEther(h.price)) : null;
+            const realized = h.kind === "close" && h.pnlUsd !== undefined
+              ? h.pnlUsd - (h.feeUsd ?? 0n) : undefined;
+            const pnlUp = (h.pnlUsd ?? 0n) >= 0n;
+            const realUp = (realized ?? 0n) >= 0n;
             return (
               <tr key={h.txHash + i} className="border-b border-lineSoft last:border-0 hover:bg-panel2/40">
-                <td className="tnum px-3 py-2.5 text-muted">#{String(h.block)}</td>
-                <td className="px-3 py-2.5">{h.kind === "open" ? "開倉" : h.kind === "close" ? "平倉" : "強平"}</td>
-                <td className="px-3 py-2.5">{h.symbol}-PERP</td>
-                <td className="px-3 py-2.5">
-                  {h.isLong === undefined ? "—" : (
-                    <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${h.isLong ? "bg-greenDim text-green" : "bg-redDim text-red"}`}>
-                      {h.isLong ? "做多" : "做空"}
-                    </span>
-                  )}
+                <td className="tnum whitespace-nowrap px-3 py-2.5 text-muted">{fmtTime(h.timestamp)}</td>
+                <td className="px-3 py-2.5 font-medium">{h.symbol}-PERP</td>
+                <td className="tnum px-3 py-2.5">{tokens !== null ? fmtNum(tokens, 4) : "—"}</td>
+                <td className="whitespace-nowrap px-3 py-2.5">
+                  <span className={`${h.isLong ? "text-green" : "text-red"}`}>{action}{dir}</span>
                 </td>
-                <td className="tnum px-3 py-2.5">{h.sizeUsd ? `${fmtUsd(h.sizeUsd, 0)} USD` : "—"}</td>
                 <td className="tnum px-3 py-2.5">{h.price ? `$${fmtPrice(h.price)}` : "—"}</td>
-                <td className={`tnum px-3 py-2.5 ${h.pnlUsd !== undefined ? (up ? "text-green" : "text-red") : ""}`}>
-                  {h.pnlUsd !== undefined ? `${up ? "+" : ""}${fmtUsd(h.pnlUsd)}` : "—"}
+                <td className="tnum px-3 py-2.5">{h.sizeUsd ? `${fmtUsd(h.sizeUsd)} USD` : "—"}</td>
+                <td className="tnum px-3 py-2.5">{h.collateralUsd !== undefined ? `${fmtUsd(h.collateralUsd)} USD` : "—"}</td>
+                <td className="tnum px-3 py-2.5 text-muted">{h.feeUsd !== undefined ? fmtUsd(h.feeUsd) : "—"}</td>
+                <td className={`tnum px-3 py-2.5 ${h.pnlUsd !== undefined ? (pnlUp ? "text-green" : "text-red") : "text-mutedDim"}`}>
+                  {h.pnlUsd !== undefined ? `${pnlUp ? "+" : ""}${fmtUsd(h.pnlUsd)}` : "—"}
+                </td>
+                <td className={`tnum px-3 py-2.5 font-medium ${realized !== undefined ? (realUp ? "text-green" : "text-red") : "text-mutedDim"}`}>
+                  {realized !== undefined ? `${realUp ? "+" : ""}${fmtUsd(realized)}` : "—"}
                 </td>
               </tr>
             );

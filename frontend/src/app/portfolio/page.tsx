@@ -14,6 +14,12 @@ type Tab = (typeof TABS)[number];
 
 const signed = (v: bigint) => `${v >= 0n ? "+" : "-"}${fmtUsd(v < 0n ? -v : v)}`;
 const cls = (v: bigint) => (v >= 0n ? "text-green" : "text-red");
+const fmtTime = (ts?: number) => {
+  if (!ts) return "—";
+  const d = new Date(ts * 1000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
 
 export default function Portfolio() {
   const { isConnected } = useAccount();
@@ -94,20 +100,27 @@ export default function Portfolio() {
         {tab === "Trade History" && (
           <HistoryTable
             rows={(history ?? []).filter((h) => h.kind === "open" || h.kind === "close" || h.kind === "liquidation")}
-            columns={["Time", "Action", "Market", "Side", "Size", "Price", "PnL"]}
-            render={(h) => (
-              <>
-                <Td muted>#{String(h.block)}</Td>
-                <Td>{h.kind === "open" ? "Open" : h.kind === "close" ? "Close" : "Liquidated"}</Td>
-                <Td>{h.symbol}-PERP</Td>
-                <Td><Side isLong={h.isLong} /></Td>
-                <Td mono>{h.sizeUsd ? fmtUsd(h.sizeUsd, 0) : "—"}</Td>
-                <Td mono>{h.price ? `$${fmtPrice(h.price)}` : "—"}</Td>
-                <Td mono className={h.pnlUsd !== undefined ? cls(h.pnlUsd) : ""}>
-                  {h.pnlUsd !== undefined ? signed(h.pnlUsd) : "—"}
-                </Td>
-              </>
-            )}
+            columns={["Time", "Action", "Market", "Side", "Size", "Price", "Fee", "PnL", "Realized"]}
+            render={(h) => {
+              const realized = h.kind === "close" && h.pnlUsd !== undefined ? h.pnlUsd - (h.feeUsd ?? 0n) : undefined;
+              return (
+                <>
+                  <Td muted>{fmtTime(h.timestamp)}</Td>
+                  <Td>{h.kind === "open" ? "Open" : h.kind === "close" ? "Close" : "Liquidated"}</Td>
+                  <Td>{h.symbol}-PERP</Td>
+                  <Td><Side isLong={h.isLong} /></Td>
+                  <Td mono>{h.sizeUsd ? fmtUsd(h.sizeUsd, 0) : "—"}</Td>
+                  <Td mono>{h.price ? `$${fmtPrice(h.price)}` : "—"}</Td>
+                  <Td mono className="text-muted">{h.feeUsd !== undefined ? fmtUsd(h.feeUsd) : "—"}</Td>
+                  <Td mono className={h.pnlUsd !== undefined ? cls(h.pnlUsd) : ""}>
+                    {h.pnlUsd !== undefined ? signed(h.pnlUsd) : "—"}
+                  </Td>
+                  <Td mono className={realized !== undefined ? cls(realized) : ""}>
+                    {realized !== undefined ? signed(realized) : "—"}
+                  </Td>
+                </>
+              );
+            }}
           />
         )}
 
@@ -117,7 +130,7 @@ export default function Portfolio() {
             columns={["Time", "Type", "Amount"]}
             render={(h) => (
               <>
-                <Td muted>#{String(h.block)}</Td>
+                <Td muted>{fmtTime(h.timestamp)}</Td>
                 <Td className={h.kind === "deposit" ? "text-green" : "text-red"}>
                   {h.kind === "deposit" ? "Deposit" : "Withdraw"}
                 </Td>

@@ -82,7 +82,8 @@ export function useAccountSummary() {
 export type HistoryItem = {
   kind: "open" | "close" | "liquidation" | "deposit" | "withdraw";
   symbol?: string; isLong?: boolean; sizeUsd?: bigint; pnlUsd?: bigint;
-  amountUsd?: bigint; price?: bigint; block: bigint; txHash: string;
+  feeUsd?: bigint; collateralUsd?: bigint; amountUsd?: bigint; price?: bigint;
+  block: bigint; txHash: string; timestamp?: number;
 };
 
 export function useHistory() {
@@ -116,13 +117,13 @@ export function useHistory() {
       ]);
 
       for (const l of inc as never[]) {
-        const a = (l as { args: { marketId: string; isLong: boolean; sizeDeltaUsd: bigint; price: bigint }; blockNumber: bigint; transactionHash: string });
+        const a = (l as { args: { marketId: string; isLong: boolean; collateralDeltaUsd: bigint; sizeDeltaUsd: bigint; price: bigint; feeUsd: bigint }; blockNumber: bigint; transactionHash: string });
         if (a.args.sizeDeltaUsd === 0n) continue;
-        items.push({ kind: "open", symbol: parseB32(a.args.marketId), isLong: a.args.isLong, sizeUsd: a.args.sizeDeltaUsd, price: a.args.price, block: a.blockNumber, txHash: a.transactionHash });
+        items.push({ kind: "open", symbol: parseB32(a.args.marketId), isLong: a.args.isLong, sizeUsd: a.args.sizeDeltaUsd, collateralUsd: a.args.collateralDeltaUsd, feeUsd: a.args.feeUsd, price: a.args.price, block: a.blockNumber, txHash: a.transactionHash });
       }
       for (const l of dec as never[]) {
-        const a = (l as { args: { marketId: string; isLong: boolean; sizeDeltaUsd: bigint; pnlUsd: bigint; price: bigint }; blockNumber: bigint; transactionHash: string });
-        items.push({ kind: "close", symbol: parseB32(a.args.marketId), isLong: a.args.isLong, sizeUsd: a.args.sizeDeltaUsd, pnlUsd: a.args.pnlUsd, price: a.args.price, block: a.blockNumber, txHash: a.transactionHash });
+        const a = (l as { args: { marketId: string; isLong: boolean; sizeDeltaUsd: bigint; pnlUsd: bigint; price: bigint; feeUsd: bigint }; blockNumber: bigint; transactionHash: string });
+        items.push({ kind: "close", symbol: parseB32(a.args.marketId), isLong: a.args.isLong, sizeUsd: a.args.sizeDeltaUsd, pnlUsd: a.args.pnlUsd, feeUsd: a.args.feeUsd, price: a.args.price, block: a.blockNumber, txHash: a.transactionHash });
       }
       for (const l of liq as never[]) {
         const a = (l as { args: { marketId: string; isLong: boolean; price: bigint }; blockNumber: bigint; transactionHash: string });
@@ -136,14 +137,26 @@ export function useHistory() {
         const a = (l as { args: { tokens: bigint }; blockNumber: bigint; transactionHash: string });
         items.push({ kind: "withdraw", amountUsd: tokenToUsd(a.args.tokens), block: a.blockNumber, txHash: a.transactionHash });
       }
+      // Attach block timestamps (deduped) for date/time display
+      const uniqueBlocks = [...new Set(items.map((i) => i.block))];
+      const stamps = new Map<bigint, number>();
+      await Promise.all(uniqueBlocks.map(async (bn) => {
+        try {
+          const b = await client!.getBlock({ blockNumber: bn });
+          stamps.set(bn, Number(b.timestamp));
+        } catch { /* leave undefined */ }
+      }));
+      for (const i of items) i.timestamp = stamps.get(i.block);
+
       items.sort((x, y) => Number(y.block - x.block));
       return items;
     },
   });
 }
 
-/** Realized PnL summed from close events. */
+/** Realized PnL summed from close events, net of trading fees. */
 export function realizedPnl(history: HistoryItem[] | undefined): bigint {
   if (!history) return 0n;
-  return history.filter((h) => h.kind === "close").reduce((s, h) => s + (h.pnlUsd ?? 0n), 0n);
+  return history.filter((h) => h.kind === "close")
+    .reduce((s, h) => s + (h.pnlUsd ?? 0n) - (h.feeUsd ?? 0n), 0n);
 }

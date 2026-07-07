@@ -55,9 +55,12 @@ export const parseB32 = (hex: string): string => {
   return out;
 };
 
+// Bitkub-native charts (THB-quoted) for ecosystem consistency. Note: these plot
+// in THB, while the platform's marks/PnL are USD — switch BTC/ETH back to
+// BINANCE:*USDT if you'd rather the chart match the USD figures.
 export const TV_SYMBOLS: Record<string, string> = {
-  BTC: "BINANCE:BTCUSDT",
-  ETH: "BINANCE:ETHUSDT",
+  BTC: "BITKUB:BTCTHB",
+  ETH: "BITKUB:ETHTHB",
   KUB: "BITKUB:KUBTHB",
 };
 

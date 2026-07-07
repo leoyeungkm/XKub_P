@@ -72,6 +72,14 @@ export default function Header() {
         {CFG.chainName}
       </div>
       <div className="flex-1" />
+      {isConnected && (
+        <button
+          onClick={() => window.dispatchEvent(new Event("xkub:getstarted"))}
+          className="rounded-md bg-accentDim px-3 py-2 text-[12px] font-medium text-accent transition-opacity hover:opacity-90"
+        >
+          ⚡ 開始
+        </button>
+      )}
       <ThemeToggle />
       <button
         onClick={faucet}

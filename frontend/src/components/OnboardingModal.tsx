@@ -52,6 +52,16 @@ export default function OnboardingModal() {
     }
   }, [address, oc.active]);
 
+  // Manual re-open from the header "Get Started" button.
+  useEffect(() => {
+    const openIt = () => {
+      setStep(address && localStorage.getItem(termsKey(address)) ? 1 : 0);
+      setOpen(true);
+    };
+    window.addEventListener("xkub:getstarted", openIt);
+    return () => window.removeEventListener("xkub:getstarted", openIt);
+  }, [address]);
+
   useEffect(() => { if (address && !code) setCode(clean(address.slice(2, 8))); }, [address, code]);
 
   if (!open || !address) return null;

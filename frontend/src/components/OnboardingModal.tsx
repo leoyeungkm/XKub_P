@@ -7,9 +7,9 @@
 //      the first time. 1–2 popups total instead of 4–6.
 import { useEffect, useState } from "react";
 import { formatEther, parseEther } from "viem";
-import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
+import { useAccount, useChainId, usePublicClient, useReadContract, useSwitchChain, useWriteContract } from "wagmi";
 import toast from "react-hot-toast";
-import { ADDR, b32, erc20Abi, referralAbi, routerAbi, tokenToUsd, usdToToken } from "@/config/contracts";
+import { ADDR, b32, chain, erc20Abi, referralAbi, routerAbi, tokenToUsd, usdToToken } from "@/config/contracts";
 import { errMsg, fmtNum } from "@/lib/format";
 import { GAS_TOPUP } from "@/lib/oneclickActions";
 import { ensureAgentAccount, useOneClick } from "@/lib/oneclick";
@@ -23,6 +23,8 @@ export default function OnboardingModal() {
   const { address } = useAccount();
   const client = usePublicClient();
   const { writeContractAsync } = useWriteContract();
+  const walletChainId = useChainId();
+  const { switchChainAsync } = useSwitchChain();
   const oc = useOneClick();
 
   const [open, setOpen] = useState(false);
@@ -81,6 +83,17 @@ export default function OnboardingModal() {
     if (!client) return;
     setBusy(true);
     try {
+      // The tx silently goes nowhere if the wallet is on another network —
+      // force it onto KUB testnet first, and surface a clear error if it won't.
+      if (walletChainId !== chain.id) {
+        toast(`切換到 ${chain.name}…`);
+        try {
+          await switchChainAsync({ chainId: chain.id });
+        } catch {
+          throw new Error(`請喺錢包切換到 ${chain.name}（chainId ${chain.id}）後再試`);
+        }
+      }
+
       const agent = ensureAgentAccount(address);
       const n = Number(amount || "0");
       const tokens = n > 0 ? usdToToken(parseEther(String(n))) : 0n;
@@ -94,7 +107,7 @@ export default function OnboardingModal() {
           const h = await writeContractAsync({
             address: ADDR.kusdt, abi: erc20Abi, functionName: "approve", args: [ADDR.router, 2n ** 256n - 1n],
           });
-          await client.waitForTransactionReceipt({ hash: h });
+          await client.waitForTransactionReceipt({ hash: h, timeout: 90_000 });
         }
       }
 
@@ -105,7 +118,7 @@ export default function OnboardingModal() {
         address: ADDR.router, abi: routerAbi, functionName: "setupAccount",
         args: [agent.address, tokens, code], value: gas,
       });
-      await client.waitForTransactionReceipt({ hash: h });
+      await client.waitForTransactionReceipt({ hash: h, timeout: 90_000 });
       toast.success("設定完成，開始交易");
       oc.refetch();
       dismiss();

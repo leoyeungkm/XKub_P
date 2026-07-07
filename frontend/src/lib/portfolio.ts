@@ -9,7 +9,7 @@ import {
   ADDR, E18, MARKETS, b32, parseB32, erc20Abi, marketAbi, oracleAbi, poolAbi,
   routerAbi, marketEventsAbi, routerEventsAbi, tokenToUsd,
 } from "@/config/contracts";
-import { useCexPrices } from "./cexPrice";
+import { useLivePrices } from "./cexPrice";
 
 const toE18 = (n: number): bigint => {
   try { return parseEther(n.toFixed(6)); } catch { return 0n; }
@@ -27,7 +27,7 @@ export type PositionRow = {
 
 export function usePositions() {
   const { address } = useAccount();
-  const { data: cex } = useCexPrices(); // live CEX (Binance/Bitkub), refreshes every few seconds
+  const cex = useLivePrices(); // BTC/ETH via Binance WS (real-time), KUB via relayer
   const { data } = useReadContracts({
     contracts: COMBOS.flatMap((c) => [
       { address: ADDR.market, abi: marketAbi, functionName: "getPosition", args: [address!, b32(c.symbol), c.isLong] },

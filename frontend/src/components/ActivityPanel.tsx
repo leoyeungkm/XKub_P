@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { formatEther } from "viem";
 import { useAccount, usePublicClient, useReadContract, useReadContracts } from "wagmi";
 import toast from "react-hot-toast";
-import { ADDR, b32, parseB32, routerAbi, triggerKey } from "@/config/contracts";
+import { ADDR, CFG, b32, parseB32, routerAbi, triggerKey } from "@/config/contracts";
 import { useKubWrite } from "@/lib/kubWrite";
 import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
@@ -317,7 +317,7 @@ const fmtTime = (ts?: number) => {
 function HistoryView({ rows }: { rows: HistoryItem[] }) {
   const trades = rows.filter((h) => h.kind === "open" || h.kind === "close" || h.kind === "liquidation");
   if (trades.length === 0) return <Empty>No trade history yet</Empty>;
-  const HEAD = ["時間", "幣種", "數量", "方向", "價格", "成交價值", "初始保證金", "費用", "倉位盈虧", "已實現盈虧"];
+  const HEAD = ["時間", "幣種", "數量", "方向", "價格", "成交價值", "初始保證金", "費用", "倉位盈虧", "已實現盈虧", "TXN"];
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[840px] text-[12.5px]">
@@ -353,6 +353,19 @@ function HistoryView({ rows }: { rows: HistoryItem[] }) {
                 </td>
                 <td className={`tnum px-3 py-2.5 font-medium ${realized !== undefined ? (realUp ? "text-green" : "text-red") : "text-mutedDim"}`}>
                   {realized !== undefined ? `${realUp ? "+" : ""}${fmtUsd(realized)}` : "—"}
+                </td>
+                <td className="px-3 py-2.5">
+                  {h.txHash && CFG.explorer ? (
+                    <a
+                      href={`${CFG.explorer}/tx/${h.txHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={h.txHash}
+                      className="tnum text-accent transition-opacity hover:opacity-80"
+                    >
+                      {h.txHash.slice(0, 6)}…{h.txHash.slice(-4)} ↗
+                    </a>
+                  ) : "—"}
                 </td>
               </tr>
             );

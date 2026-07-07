@@ -11,7 +11,6 @@ import { useAccount, useChainId, usePublicClient, useReadContract, useSwitchChai
 import toast from "react-hot-toast";
 import { ADDR, b32, chain, erc20Abi, kubTxOverrides, referralAbi, routerAbi, tokenToUsd, usdToToken } from "@/config/contracts";
 import { errMsg, fmtNum } from "@/lib/format";
-import { GAS_TOPUP } from "@/lib/oneclickActions";
 import { ensureAgentAccount, useOneClick } from "@/lib/oneclick";
 
 const seenKey = (o: string) => `xkub.onboard.${o.toLowerCase()}`;
@@ -116,11 +115,13 @@ export default function OnboardingModal() {
       }
 
       toast("Setting up…");
-      const gas = oc.agentGas < GAS_TOPUP / 2n ? GAS_TOPUP : 0n;
+      // Trading is gasless (agent signs, relayer pays), so the agent needs no KUB.
+      // Don't spend the user's KUB funding agent gas here — the on-chain 1-click
+      // fallback can be topped up manually from the Account panel if wanted.
       const code = ADDR.referral && !hasCode && refCode.length >= 3 ? b32(refCode) : ZERO32;
       const h = await writeContractAsync({
         address: ADDR.router, abi: routerAbi, functionName: "setupAccount",
-        args: [agent.address, tokens, code], value: gas, ...fees,
+        args: [agent.address, tokens, code], value: 0n, ...fees,
       });
       await client.waitForTransactionReceipt({ hash: h, timeout: 90_000 });
       toast.success("設定完成，開始交易");
@@ -172,7 +173,7 @@ export default function OnboardingModal() {
           <div className="flex flex-col gap-4 p-5">
             <div className="text-[14px] font-semibold">啟用一鍵交易並入金</div>
             <p className="text-[12.5px] leading-relaxed text-muted">
-              一筆交易同時完成：授權代理密鑰（免彈窗交易）、充值 {formatEther(GAS_TOPUP)} KUB gas、存入交易保證金。之後交易零彈窗，資金隨時可於 Portfolio 提取。
+              一筆交易同時完成：授權代理密鑰（免彈窗交易）、存入交易保證金。之後交易走 relayer 代付 gas，零彈窗零 gas，資金隨時可於 Portfolio 提取。
             </p>
             <div>
               <div className="mb-1.5 flex justify-between text-[11px]">

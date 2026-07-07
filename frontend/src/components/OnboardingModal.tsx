@@ -49,13 +49,14 @@ export default function OnboardingModal() {
   const hasCode = !!myCodeHex && myCodeHex !== ZERO32;
 
   useEffect(() => {
-    if (!address || oc.active) return;
+    // Already onboarded — agent authorised, or collateral already deposited.
+    if (!address || oc.active || oc.balance > 0n) return;
     if (!localStorage.getItem(seenKey(address))) {
       setStep(localStorage.getItem(termsKey(address)) ? 1 : 0);
       setAgreed(!!localStorage.getItem(termsKey(address)));
       setOpen(true);
     }
-  }, [address, oc.active]);
+  }, [address, oc.active, oc.balance]);
 
   useEffect(() => {
     const openIt = () => {
@@ -136,7 +137,10 @@ export default function OnboardingModal() {
           <div className="flex items-center gap-2 text-[15px] font-semibold">
             <span className="text-accent">⚡</span> 開始交易 · Get Started
           </div>
-          <Steps step={step} />
+          <div className="flex items-center gap-3">
+            <Steps step={step} />
+            <button onClick={dismiss} className="text-muted transition-colors hover:text-fg" title="關閉">✕</button>
+          </div>
         </div>
 
         {step === 0 && (

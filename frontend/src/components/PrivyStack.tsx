@@ -7,7 +7,7 @@ import { PrivyProvider } from "@privy-io/react-auth";
 import { WagmiProvider, createConfig } from "@privy-io/wagmi";
 import { http } from "wagmi";
 import { Toaster } from "react-hot-toast";
-import { chain } from "@/config/contracts";
+import { chain, RPC_HTTP } from "@/config/contracts";
 import { PRIVY_APP_ID } from "@/lib/privy";
 import { useState, type ReactNode } from "react";
 
@@ -15,7 +15,7 @@ import { useState, type ReactNode } from "react";
 // (embedded wallets + any external wallet the user logs in with).
 const privyWagmiConfig = createConfig({
   chains: [chain],
-  transports: { [chain.id]: http(undefined, { batch: true }) },
+  transports: { [chain.id]: http(RPC_HTTP, { batch: true }) },
   batch: { multicall: true }, // aggregate contract reads via Multicall3
 });
 

@@ -5,7 +5,7 @@ import { WagmiProvider, createConfig, http } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { Toaster } from "react-hot-toast";
 import dynamic from "next/dynamic";
-import { chain } from "@/config/contracts";
+import { chain, RPC_HTTP } from "@/config/contracts";
 import { PRIVY_ENABLED } from "@/lib/privy";
 import { useState, type ReactNode } from "react";
 
@@ -15,7 +15,7 @@ const PrivyStack = dynamic(() => import("./PrivyStack"), { ssr: false });
 const wagmiConfig = createConfig({
   chains: [chain],
   connectors: [injected()],
-  transports: { [chain.id]: http(undefined, { batch: true }) },
+  transports: { [chain.id]: http(RPC_HTTP, { batch: true }) },
   batch: { multicall: true }, // aggregate contract reads via Multicall3
 });
 

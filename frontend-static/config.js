@@ -14,7 +14,7 @@ window.XKUB_CONFIG = {
     "XKubReferral": "0x806abd5ac2cAb34D618C1b87e5337f60E069D3b7"
   },
   "multicall3": "0x27bE4c35745D6d7b63d254408400413B4Bd4200B",
-  "relayerUrl": "http://localhost:8787/order",
+  "relayerUrl": "http://localhost:8799/order",
   "markets": [
     {
       "symbol": "BTC",

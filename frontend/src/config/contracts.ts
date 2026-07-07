@@ -5,11 +5,17 @@ export const CFG = deployment;
 
 const MC3 = (CFG as { multicall3?: string }).multicall3;
 
+// The KUB testnet RPC doesn't send CORS headers for browser preflight, so the
+// browser calls our same-origin proxy (frontend/src/app/api/rpc) which forwards
+// server-side. Server render / build has no `window`, so it hits the RPC direct.
+export const RPC_HTTP =
+  typeof window !== "undefined" ? `${window.location.origin}/api/rpc` : CFG.rpcUrl;
+
 export const chain = defineChain({
   id: CFG.chainId,
   name: CFG.chainName,
   nativeCurrency: { name: "KUB", symbol: "KUB", decimals: 18 },
-  rpcUrls: { default: { http: [CFG.rpcUrl] } },
+  rpcUrls: { default: { http: [RPC_HTTP] } },
   // Batches useReadContracts into a single eth_call for far fewer round-trips.
   ...(MC3 ? { contracts: { multicall3: { address: MC3 as `0x${string}` } } } : {}),
   ...(CFG.explorer

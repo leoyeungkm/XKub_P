@@ -60,7 +60,12 @@ export const marketAbi = parseAbi([
   "function getMarketState(bytes32 marketId) view returns (uint256 longSizeUsd, uint256 shortSizeUsd, uint256 cumBorrowLongX18, uint256 cumBorrowShortX18, uint256 lastAccrual)",
   "function positionFeeBps() view returns (uint256)",
   "function marketConfig(bytes32 marketId) view returns (bool listed, uint256 maxLeverageX, uint256 maxOiUsd, uint256 borrowRateFactorBps)",
+  "function effectiveFeeBps(address trader) view returns (uint256)",
+  "function feeTier(address trader) view returns (uint8)",
 ]);
+
+export const FEE_TIERS = ((CFG as { feeTiers?: { tier: number; name: string; discountBps: number }[] }).feeTiers)
+  ?? [{ tier: 0, name: "Standard", discountBps: 0 }];
 
 export const routerAbi = parseAbi([
   "function createIncreaseRequest(bytes32 marketId, bool isLong, uint256 collateralTokens, uint256 sizeDeltaUsd, uint256 acceptablePrice) payable returns (uint256)",

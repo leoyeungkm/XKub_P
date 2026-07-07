@@ -9,7 +9,7 @@ import {
 } from "@/config/contracts";
 import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
-import { useMarketFees, useOraclePrice } from "./MarketBar";
+import { useMarketFees, useMyFee, useOraclePrice } from "./MarketBar";
 
 const SLIPPAGE_OPTS = [
   { label: "0.3%", bps: 30n },
@@ -24,6 +24,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
   const { writeContractAsync } = useWriteContract();
   const price = useOraclePrice(symbol);
   const fees = useMarketFees(symbol);
+  const myFee = useMyFee();
   const oneClick = useOneClick();
 
   const [isLong, setIsLong] = useState(true);
@@ -211,10 +212,12 @@ export default function TradePanel({ symbol }: { symbol: string }) {
           <Row k="Entry · oracle" v={price > 0n ? `$${fmtPrice(price)}` : "—"} />
           <Row k="Est. liq. price" v={liqPrice ? `$${fmtNum(liqPrice, liqPrice >= 100 ? 1 : 4)}` : "—"} accent />
           <div className="my-1 border-t border-lineSoft" />
-          <Row
-            k={`Open fee${fees.feeBps !== null ? ` · ${(fees.feeBps / 100).toFixed(2)}%` : ""}`}
-            v={sizeUsd && fees.feeBps !== null
-              ? `${(sizeUsd * fees.feeBps / 10000).toFixed(2)} KUSDT` : "—"}
+          <FeeRow
+            effBps={myFee.effectiveFeeBps ?? fees.feeBps}
+            baseBps={fees.feeBps}
+            sizeUsd={sizeUsd}
+            tierName={myFee.tierName}
+            tier={myFee.tier}
           />
           <Row
             k="Borrow /h"
@@ -248,6 +251,33 @@ function Row({ k, v, accent }: { k: string; v: string; accent?: boolean }) {
     <div className="flex justify-between">
       <span className="text-muted">{k}</span>
       <span className={`tnum ${accent ? "text-accent" : "text-fg"}`}>{v}</span>
+    </div>
+  );
+}
+
+// Open fee row: shows the tier-discounted rate, with the VIP tier badge and a
+// struck-through base rate when the trader has a discount.
+function FeeRow({ effBps, baseBps, sizeUsd, tierName, tier }: {
+  effBps: number | null; baseBps: number | null; sizeUsd: number; tierName: string; tier: number;
+}) {
+  const discounted = effBps !== null && baseBps !== null && effBps < baseBps;
+  return (
+    <div className="flex justify-between">
+      <span className="flex items-center gap-1.5 text-muted">
+        Open fee
+        {tier > 0 && (
+          <span className="rounded bg-accentDim px-1 py-0.5 text-[10px] font-medium text-accent">{tierName}</span>
+        )}
+      </span>
+      <span className="tnum flex items-center gap-1.5">
+        {discounted && (
+          <span className="text-[10px] text-mutedDim line-through">{(baseBps! / 100).toFixed(2)}%</span>
+        )}
+        <span>
+          {effBps !== null ? `${(effBps / 100).toFixed(2)}%` : "—"}
+          {sizeUsd && effBps !== null ? ` · ${(sizeUsd * effBps / 10000).toFixed(2)}` : ""}
+        </span>
+      </span>
     </div>
   );
 }

@@ -1,8 +1,29 @@
 "use client";
 
-import { useReadContract, useReadContracts } from "wagmi";
-import { ADDR, MARKETS, b32, marketAbi, oracleAbi, poolAbi } from "@/config/contracts";
+import { useAccount, useReadContract, useReadContracts } from "wagmi";
+import { ADDR, FEE_TIERS, MARKETS, b32, marketAbi, oracleAbi, poolAbi } from "@/config/contracts";
 import { fmtPrice, fmtUsd } from "@/lib/format";
+
+/** The connected trader's effective (tier-discounted) fee and VIP tier. */
+export function useMyFee() {
+  const { address } = useAccount();
+  const { data } = useReadContracts({
+    contracts: address ? [
+      { address: ADDR.market, abi: marketAbi, functionName: "effectiveFeeBps", args: [address] },
+      { address: ADDR.market, abi: marketAbi, functionName: "feeTier", args: [address] },
+    ] as never[] : [],
+    query: { enabled: !!address, refetchInterval: 15000 },
+  });
+  const effBps = data?.[0]?.result as bigint | undefined;
+  const tier = data?.[1]?.result as number | undefined;
+  const meta = FEE_TIERS.find((t) => t.tier === tier) ?? FEE_TIERS[0];
+  return {
+    effectiveFeeBps: effBps !== undefined ? Number(effBps) : null,
+    tier: tier ?? 0,
+    tierName: meta.name,
+    discountBps: meta.discountBps,
+  };
+}
 
 /** Trading fee (bps) and current hourly borrow rates per side (%/h). */
 export function useMarketFees(symbol: string) {

@@ -101,6 +101,17 @@ async function main() {
   await (await referral.setMarket(await market.getAddress())).wait();
   // directTradingEnabled stays FALSE — all orders go through the router
 
+  // ─── Protocol revenue + VIP fee tiers ───────────────────────────────────────
+  const treasury = process.env.TREASURY_ADDRESS ?? deployer.address;
+  await (await market.setTreasury(treasury)).wait();
+  await (await market.setProtocolFeeShareBps(Number(process.env.PROTOCOL_FEE_SHARE_BPS ?? "3000"))).wait(); // 30% of fees
+  // VIP tiers: tier 1 = 10% off, tier 2 = 25% off, tier 3 = 50% off (tier 0 = default)
+  const TIERS: Record<number, number> = { 1: 1000, 2: 2500, 3: 5000 };
+  for (const [tier, disc] of Object.entries(TIERS)) {
+    await (await market.setTierDiscount(Number(tier), disc)).wait();
+  }
+  console.log(`Treasury: ${treasury} · protocol fee share 30% · VIP tiers 1/2/3 = 10/25/50% off`);
+
   const keeper = process.env.KEEPER_ADDRESS ?? deployer.address;
   await (await oracle.setKeeper(keeper, true)).wait();
   await (await router.setKeeper(keeper, true)).wait();
@@ -191,6 +202,13 @@ async function main() {
     kusdtDecimals,
     addresses: out.addresses,
     markets: markets.map(m => ({ symbol: m.symbol, maxLeverageX: m.maxLeverageX })),
+    // VIP fee tiers (discount in bps of the position fee) — for UI display
+    feeTiers: [
+      { tier: 0, name: "Standard", discountBps: 0 },
+      { tier: 1, name: "VIP 1", discountBps: 1000 },
+      { tier: 2, name: "VIP 2", discountBps: 2500 },
+      { tier: 3, name: "VIP 3", discountBps: 5000 },
+    ],
   };
   // Next.js app: static JSON import
   const feCfgDir = path.join(__dirname, "..", "frontend", "src", "config");

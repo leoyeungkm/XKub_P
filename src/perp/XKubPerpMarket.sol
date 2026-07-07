@@ -116,6 +116,17 @@ contract XKubPerpMarket is ReentrancyGuard {
     uint256 public minCollateralUsd    = 10e18;  // 10 KUSDT
     uint256 public maxPriceAge         = 300;    // seconds
 
+    // VIP fee tiers: a trader's tier gives a discount on the position fee.
+    // Tier 0 = default (0% discount). Admin assigns tiers and per-tier discounts.
+    mapping(address => uint8)  public feeTier;
+    mapping(uint8 => uint256)  public tierDiscountBps;   // e.g. tier 3 → 3000 = 30% off the fee
+
+    // Protocol revenue: a share of every position fee is routed to the treasury
+    // (drawn from the pool after the fee lands there, like referral rebates).
+    address public treasury;
+    uint256 public protocolFeeShareBps;                  // 0 = all fees stay with LPs
+    uint256 public constant MAX_PROTOCOL_SHARE_BPS = 5000; // ≤50% of the position fee
+
     event MarketListed(bytes32 indexed marketId, uint256 maxLeverageX, uint256 maxOiUsd, uint256 borrowRateFactorBps);
     event MarketConfigured(bytes32 indexed marketId, uint256 maxLeverageX, uint256 maxOiUsd, uint256 borrowRateFactorBps);
     event PositionIncreased(address indexed owner, bytes32 indexed marketId, bool isLong,
@@ -131,6 +142,11 @@ contract XKubPerpMarket is ReentrancyGuard {
     event RouterSet(address indexed router);
     event DirectTradingSet(bool enabled);
     event ReferralSet(address indexed referral);
+    event FeeTierSet(address indexed trader, uint8 tier);
+    event TierDiscountSet(uint8 indexed tier, uint256 discountBps);
+    event TreasurySet(address indexed treasury);
+    event ProtocolFeeShareSet(uint256 bps);
+    event ProtocolFeePaid(address indexed treasury, uint256 usd);
 
     modifier onlyAdmin() {
         require(msg.sender == admin, "!admin");
@@ -217,7 +233,7 @@ contract XKubPerpMarket is ReentrancyGuard {
         uint256 price;
         if (sizeDeltaUsd > 0) {
             price = oracle.getPrice(marketId, maxPriceAge);
-            uint256 openFeeUsd = (sizeDeltaUsd * positionFeeBps) / 10000;
+            uint256 openFeeUsd = (sizeDeltaUsd * effectiveFeeBps(owner)) / 10000;
             require(p.collateralUsd > openFeeUsd, "fee > collateral");
             p.collateralUsd -= openFeeUsd;
             feeUsd += openFeeUsd;
@@ -247,7 +263,7 @@ contract XKubPerpMarket is ReentrancyGuard {
         }
 
         _sendToPool(feeUsd);
-        if (sizeDeltaUsd > 0) _payReferralRebate(owner, (sizeDeltaUsd * positionFeeBps) / 10000);
+        if (sizeDeltaUsd > 0) _distributeFees(owner, (sizeDeltaUsd * effectiveFeeBps(owner)) / 10000);
         emit PositionIncreased(owner, marketId, isLong, collateralTokens * scaler, sizeDeltaUsd, price, feeUsd);
     }
 
@@ -303,7 +319,7 @@ contract XKubPerpMarket is ReentrancyGuard {
             if (uint256(pnlUsd) > maxProfit) pnlUsd = int256(maxProfit);
         }
 
-        uint256 closeFeeUsd = (sizeDeltaUsd * positionFeeBps) / 10000;
+        uint256 closeFeeUsd = (sizeDeltaUsd * effectiveFeeBps(owner)) / 10000;
 
         // Split payout between trader / pool
         int256 grossUsd = int256(collateralShare) + pnlUsd - int256(closeFeeUsd);
@@ -330,7 +346,7 @@ contract XKubPerpMarket is ReentrancyGuard {
         _sendToPool(toPoolUsd + borrowFeeUsd);
         if (fromCollateralUsd > 0) kusdt.safeTransfer(owner, fromCollateralUsd / scaler);
         if (fromPoolUsd > 0) pool.payOutUsd(owner, fromPoolUsd);
-        _payReferralRebate(owner, closeFeeUsd);
+        _distributeFees(owner, closeFeeUsd);
 
         emit PositionDecreased(owner, marketId, isLong, sizeDeltaUsd, price, pnlUsd, payoutUsd, closeFeeUsd + borrowFeeUsd);
     }
@@ -569,19 +585,43 @@ contract XKubPerpMarket is ReentrancyGuard {
         if (tokens > 0) kusdt.safeTransfer(address(pool), tokens);
     }
 
-    /// @dev Rebate a fraction of the position fee to the trader's referrer.
-    ///      The fee is already in the pool at this point; the rebate is drawn
-    ///      back out via the pool's payout hook, so pool value simply nets the
-    ///      fee minus the rebate. Never reverts the trade on referral issues.
-    function _payReferralRebate(address trader, uint256 feeBaseUsd) internal {
+    /// @notice The position-fee rate a trader actually pays, after their VIP
+    ///         tier discount. Basis points of size.
+    function effectiveFeeBps(address trader) public view returns (uint256) {
+        uint256 discount = tierDiscountBps[feeTier[trader]];
+        if (discount >= 10000) return 0;
+        return (positionFeeBps * (10000 - discount)) / 10000;
+    }
+
+    /// @dev Split a position fee (already sitting in the pool) between the
+    ///      protocol treasury and the trader's referrer; whatever is left
+    ///      stays with the LPs. Both cuts are drawn back out via the pool's
+    ///      payout hook, so pool value simply nets the fee minus the cuts.
+    ///      Never reverts the trade on fee-routing issues.
+    function _distributeFees(address trader, uint256 feeUsd) internal {
+        if (feeUsd == 0) return;
+
+        // Protocol revenue cut
+        if (treasury != address(0) && protocolFeeShareBps > 0) {
+            uint256 protoUsd = (feeUsd * protocolFeeShareBps) / 10000;
+            if (protoUsd / scaler > 0) {
+                pool.payOutUsd(treasury, protoUsd);
+                emit ProtocolFeePaid(treasury, protoUsd);
+            }
+        }
+
+        // Referral rebate
         address ref = referral;
-        if (ref == address(0) || feeBaseUsd == 0) return;
-        (address referrer, uint256 rebateBps) = IXKubReferral(ref).getRebate(trader);
-        if (referrer == address(0) || rebateBps == 0) return;
-        uint256 rebateUsd = (feeBaseUsd * rebateBps) / 10000;
-        if (rebateUsd / scaler == 0) return; // sub-unit dust, skip
-        pool.payOutUsd(ref, rebateUsd);          // pool forwards KUSDT to the referral contract
-        IXKubReferral(ref).accrue(referrer, trader, rebateUsd);
+        if (ref != address(0)) {
+            (address referrer, uint256 rebateBps) = IXKubReferral(ref).getRebate(trader);
+            if (referrer != address(0) && rebateBps > 0) {
+                uint256 rebateUsd = (feeUsd * rebateBps) / 10000;
+                if (rebateUsd / scaler > 0) {
+                    pool.payOutUsd(ref, rebateUsd);
+                    IXKubReferral(ref).accrue(referrer, trader, rebateUsd);
+                }
+            }
+        }
     }
 
     // ─── Admin ─────────────────────────────────────────────────────────────────
@@ -651,6 +691,43 @@ contract XKubPerpMarket is ReentrancyGuard {
     function setReferral(address _referral) external onlyAdmin {
         referral = _referral;
         emit ReferralSet(_referral);
+    }
+
+    // ─── VIP tiers & protocol revenue ──────────────────────────────────────────
+
+    /// @notice Assign a trader's VIP fee tier (0 = default, no discount).
+    function setFeeTier(address trader, uint8 tier) external onlyAdmin {
+        feeTier[trader] = tier;
+        emit FeeTierSet(trader, tier);
+    }
+
+    /// @notice Batch-assign VIP tiers (e.g. from an off-chain volume snapshot).
+    function setFeeTiers(address[] calldata traders, uint8 tier) external onlyAdmin {
+        for (uint256 i = 0; i < traders.length; i++) {
+            feeTier[traders[i]] = tier;
+            emit FeeTierSet(traders[i], tier);
+        }
+    }
+
+    /// @notice Set the fee discount for a tier, in bps of the position fee
+    ///         (3000 = 30% off). Capped below 100%.
+    function setTierDiscount(uint8 tier, uint256 discountBps) external onlyAdmin {
+        require(discountBps < 10000, "discount < 100%");
+        tierDiscountBps[tier] = discountBps;
+        emit TierDiscountSet(tier, discountBps);
+    }
+
+    function setTreasury(address _treasury) external onlyAdmin {
+        treasury = _treasury;
+        emit TreasurySet(_treasury);
+    }
+
+    /// @notice Share of each position fee routed to the treasury (bps). The
+    ///         rest stays with LPs. Capped at MAX_PROTOCOL_SHARE_BPS.
+    function setProtocolFeeShareBps(uint256 bps) external onlyAdmin {
+        require(bps <= MAX_PROTOCOL_SHARE_BPS, "> max");
+        protocolFeeShareBps = bps;
+        emit ProtocolFeeShareSet(bps);
     }
 
     /// @notice Testnet convenience only — leave OFF in production so all

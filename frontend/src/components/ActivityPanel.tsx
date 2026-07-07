@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatEther } from "viem";
 import { useAccount, usePublicClient, useReadContract, useReadContracts } from "wagmi";
@@ -11,6 +11,7 @@ import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
 import { gaslessAvailable, submitGaslessOrder } from "@/lib/gasless";
 import { usePositions, useHistory, refreshPositions, type PositionRow, type HistoryItem } from "@/lib/portfolio";
+import { usePendingOpens, removePendingOpen, type PendingOpen } from "@/lib/optimistic";
 import TpSlModal from "./TpSlModal";
 
 type Tab = "positions" | "orders" | "history";
@@ -22,6 +23,18 @@ export default function ActivityPanel() {
   const oneClick = useOneClick();
   const positions = usePositions();
   const { data: history } = useHistory();
+  const pendingOpens = usePendingOpens();
+  // Drop a placeholder once its real position is on-chain.
+  useEffect(() => {
+    for (const pp of pendingOpens) {
+      if (positions.some((r) => r.symbol === pp.symbol && r.isLong === pp.isLong)) {
+        removePendingOpen(pp.symbol, pp.isLong);
+      }
+    }
+  }, [positions, pendingOpens]);
+  const pendingToShow = pendingOpens.filter(
+    (pp) => !positions.some((r) => r.symbol === pp.symbol && r.isLong === pp.isLong),
+  );
 
   const { data: minExecFee } = useReadContract({
     address: ADDR.router, abi: routerAbi, functionName: "minExecutionFee",
@@ -95,7 +108,7 @@ export default function ActivityPanel() {
   };
 
   const TABS: { id: Tab; label: string; count?: number }[] = [
-    { id: "positions", label: "持有倉位", count: positions.length },
+    { id: "positions", label: "持有倉位", count: positions.length + pendingToShow.length },
     { id: "orders", label: "當前委託", count: pending.rows.length },
     { id: "history", label: "交易歷史" },
   ];
@@ -125,7 +138,7 @@ export default function ActivityPanel() {
         )}
       </div>
 
-      {tab === "positions" && <PositionsView rows={positions} onClose={closeOne} closing={closing} />}
+      {tab === "positions" && <PositionsView rows={positions} pending={pendingToShow} onClose={closeOne} closing={closing} />}
       {tab === "orders" && <OrdersView rows={pending.rows} onCancel={pending.cancel} />}
       {tab === "history" && <HistoryView rows={history ?? []} />}
     </div>
@@ -136,7 +149,7 @@ export default function ActivityPanel() {
 
 const HEAD = ["幣種", "數量", "方向", "倉位價值", "開倉價格", "當前價格", "初始保證金", "倉位盈虧 (回報率)", "預估強平價", "止盈/止損", ""];
 
-function PositionsView({ rows, onClose, closing }: { rows: PositionRow[]; onClose: (p: PositionRow) => void; closing: Record<string, boolean> }) {
+function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[]; pending: PendingOpen[]; onClose: (p: PositionRow) => void; closing: Record<string, boolean> }) {
   const { address } = useAccount();
   const [tpsl, setTpsl] = useState<PositionRow | null>(null);
 
@@ -153,7 +166,28 @@ function PositionsView({ rows, onClose, closing }: { rows: PositionRow[]; onClos
     return t && t[3] ? { tp: t[0], sl: t[1] } : null;
   };
 
-  if (rows.length === 0) return <Empty>No open positions</Empty>;
+  if (rows.length === 0 && pending.length === 0) return <Empty>No open positions</Empty>;
+  const pendRow = (pp: PendingOpen) => {
+    const lev = pp.collateralUsd > 0n ? Number(pp.sizeUsd) / Number(pp.collateralUsd) : 0;
+    return (
+      <tr key={`pending-${pp.symbol}-${pp.isLong}`} className="border-b border-lineSoft last:border-0 animate-pulse text-mutedDim">
+        <td className="px-3 py-2.5 font-medium">{pp.symbol}-PERP</td>
+        <td className="tnum px-3 py-2.5">—</td>
+        <td className="px-3 py-2.5">
+          <span className={`tnum w-fit rounded px-1.5 py-0.5 text-[11px] font-medium ${pp.isLong ? "bg-greenDim text-green" : "bg-redDim text-red"}`}>
+            {pp.isLong ? "做多" : "做空"} {lev.toFixed(0)}x
+          </span>
+        </td>
+        <td className="tnum px-3 py-2.5">{fmtUsd(pp.sizeUsd)} USD</td>
+        <td className="tnum px-3 py-2.5">${fmtPrice(pp.entry)}</td>
+        <td className="px-3 py-2.5">—</td>
+        <td className="tnum px-3 py-2.5">{fmtUsd(pp.collateralUsd)} USD</td>
+        <td className="px-3 py-2.5" colSpan={4}>
+          <span className="rounded bg-panel2 px-2 py-0.5 text-[11px] text-accent">確認中 · Confirming…</span>
+        </td>
+      </tr>
+    );
+  };
   return (
     <div className="overflow-x-auto">
       {tpsl && <TpSlModal pos={tpsl} onClose={() => setTpsl(null)} />}
@@ -164,6 +198,7 @@ function PositionsView({ rows, onClose, closing }: { rows: PositionRow[]; onClos
           </tr>
         </thead>
         <tbody>
+          {pending.map(pendRow)}
           {rows.map((p, i) => {
             const trig = trigOf(i);
             const lev = p.collateralUsd > 0n ? Number(p.sizeUsd) / Number(p.collateralUsd) : 0;

@@ -12,6 +12,7 @@ import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
 import { gaslessAvailable, submitGaslessOrder } from "@/lib/gasless";
 import { useAccountSummary, refreshPositions } from "@/lib/portfolio";
+import { addPendingOpen, removePendingOpen } from "@/lib/optimistic";
 import { useMarketFees, useMyFee, useOraclePrice } from "./MarketBar";
 import { useDisplayPrice } from "@/lib/cexPrice";
 
@@ -116,6 +117,9 @@ export default function TradePanel({ symbol }: { symbol: string }) {
     if (!(colNum > 0)) return toast.error("Enter collateral");
     setBusy(true);
     refreshPositions(); // start polling now so the position shows the moment it mines
+    // Optimistic: show a "confirming" position row immediately (display-only).
+    addPendingOpen({ symbol, isLong, sizeUsd: parseEther(String(sizeUsd)),
+      collateralUsd: parseEther(String(colNum)), entry: price });
     try {
       const collateralTokens = usdToToken(parseEther(String(colNum)));
       const sizeUsd18 = parseEther(String(sizeUsd));
@@ -195,6 +199,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
       setAmount("");
       refreshPositions();
     } catch (e) {
+      removePendingOpen(symbol, isLong); // order failed — drop the placeholder
       toast.error(errMsg(e));
     } finally {
       setBusy(false);

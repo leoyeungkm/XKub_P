@@ -3,7 +3,7 @@
 // Rendered only when Privy is enabled — usePrivy throws outside PrivyProvider.
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useSetActiveWallet } from "@privy-io/wagmi";
-import { useAccount } from "wagmi";
+import { useAccount, useDisconnect } from "wagmi";
 import { useEffect } from "react";
 import toast from "react-hot-toast";
 import { shortAddr } from "@/lib/format";
@@ -13,6 +13,13 @@ export default function PrivyConnect() {
   const { wallets } = useWallets();
   const { setActiveWallet } = useSetActiveWallet();
   const { address, isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
+
+  // Fully log out: clear wagmi's connection too, so balances/state reset.
+  const fullLogout = async () => {
+    try { disconnect(); } catch {}
+    await logout();
+  };
 
   const embedded = wallets.find((w) => w.walletClientType === "privy");
 
@@ -58,7 +65,7 @@ export default function PrivyConnect() {
         </button>
       )}
       <button
-        onClick={logout}
+        onClick={fullLogout}
         className="rounded-md border border-line bg-panel2 px-4 py-2 font-medium transition-colors hover:border-red/40 hover:text-red"
         title="Log out"
       >

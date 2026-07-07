@@ -27,7 +27,9 @@ export default function PrivyStack({ children }: { children: ReactNode }) {
       config={{
         defaultChain: chain,
         supportedChains: [chain],
-        loginMethods: ["email", "google", "wallet"],
+        // 'google' requires enabling Google OAuth in the Privy dashboard first;
+        // leave it out until configured to avoid a "not allowed" error.
+        loginMethods: ["email", "wallet"],
         embeddedWallets: {
           ethereum: { createOnLogin: "users-without-wallets" },
           // Silent signing: no Privy confirmation modal per transaction —

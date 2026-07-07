@@ -355,12 +355,12 @@ export default function TradePanel({ symbol }: { symbol: string }) {
         )}
         <button
           onClick={submit}
-          disabled={busy || oppositeOpen}
+          disabled={busy || oppositeOpen || !address}
           className={`rounded-md py-3 text-[14px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40 ${
-            isLong ? "bg-green" : "bg-red"
+            !address ? "bg-mutedDim" : isLong ? "bg-green" : "bg-red"
           }`}
         >
-          {busy ? "Submitting…" : oppositeOpen ? `先平掉 ${symbol} ${isLong ? "空" : "多"}倉`
+          {!address ? "請先連接錢包" : busy ? "Submitting…" : oppositeOpen ? `先平掉 ${symbol} ${isLong ? "空" : "多"}倉`
             : `${oneClick.active ? "⚡ " : ""}${isLong ? "Buy / Long" : "Sell / Short"} ${symbol}`}
         </button>
 

@@ -16,6 +16,8 @@ export default function OneClickPanel() {
   // Privy embedded wallets already sign silently — the agent key only helps
   // external wallets that pop a confirmation per tx.
   if (connector?.id === "io.privy.wallet") return null;
+  // Nothing to configure without a connected wallet.
+  if (!oc.owner) return null;
 
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-panel">

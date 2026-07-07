@@ -132,7 +132,9 @@ export const RELAYER_URL = (CFG as { relayerUrl?: string }).relayerUrl ?? "";
 // never comes). Force legacy (Type-0) with an explicit gasPrice on every write
 // that goes through a user's injected wallet.
 const GWEI = 1_000_000_000n;
-const MIN_GAS_PRICE = 100n * GWEI; // floor — testnet drops anything too cheap
+const MIN_GAS_PRICE = 80n * GWEI;  // floor — comfortably above the ~55 gwei testnet min
+const MAX_GAS_PRICE = 130n * GWEI; // cap — eth_gasPrice reads ~185 but ~100 mines fine,
+                                   // so don't overpay (a too-high price + value can exceed balance)
 
 export async function kubTxOverrides(
   client: { getGasPrice: () => Promise<bigint> },
@@ -141,12 +143,12 @@ export async function kubTxOverrides(
   try {
     gasPrice = await client.getGasPrice();
   } catch {
-    gasPrice = 185n * GWEI; // typical testnet reading
+    gasPrice = MAX_GAS_PRICE;
   }
-  // 2x headroom so a spike between quote and mine can't strand the tx (testnet
-  // gas is cheap), and never below the floor.
-  const bumped = gasPrice * 2n;
-  return { type: "legacy", gasPrice: bumped > MIN_GAS_PRICE ? bumped : MIN_GAS_PRICE };
+  // Clamp into a sane band: enough to mine, not so high it strands a low balance.
+  if (gasPrice < MIN_GAS_PRICE) gasPrice = MIN_GAS_PRICE;
+  if (gasPrice > MAX_GAS_PRICE) gasPrice = MAX_GAS_PRICE;
+  return { type: "legacy", gasPrice };
 }
 
 // keccak256(abi.encodePacked(owner, marketId, isLong)) — matches the router

@@ -34,7 +34,7 @@ export function usePositions() {
       { address: ADDR.market, abi: marketAbi, functionName: "getPositionPnl", args: [address!, b32(c.symbol), c.isLong] },
       { address: ADDR.oracle, abi: oracleAbi, functionName: "peekPrice", args: [b32(c.symbol)] },
     ]) as never[],
-    query: { enabled: !!address, refetchInterval: 10000 },
+    query: { enabled: !!address, refetchInterval: 5000 },
   });
 
   const rows: PositionRow[] = COMBOS.map((c, i) => {

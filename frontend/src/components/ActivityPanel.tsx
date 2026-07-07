@@ -29,9 +29,13 @@ export default function ActivityPanel() {
 
   const pending = usePendingOrders();
   const [tab, setTab] = useState<Tab>("positions");
+  const [closing, setClosing] = useState<Record<string, boolean>>({});
 
   const closeOne = async (p: PositionRow) => {
     if (!address || !client) return;
+    const key = `${p.symbol}-${p.isLong}`;
+    if (closing[key]) return; // already closing — ignore repeat clicks
+    setClosing((s) => ({ ...s, [key]: true }));
     try {
       const fee = minExecFee ?? 0n;
       const acceptable = p.mark > 0n ? (p.isLong ? p.mark - p.mark / 100n : p.mark + p.mark / 100n) : 0n;
@@ -62,8 +66,10 @@ export default function ActivityPanel() {
       });
       await client.waitForTransactionReceipt({ hash });
       toast.success("Close queued");
+      // leave `closing` set on success — the row disappears on the next refetch
     } catch (e) {
       toast.error(errMsg(e));
+      setClosing((s) => { const n = { ...s }; delete n[key]; return n; }); // allow retry
     }
   };
 
@@ -102,7 +108,7 @@ export default function ActivityPanel() {
         )}
       </div>
 
-      {tab === "positions" && <PositionsView rows={positions} onClose={closeOne} />}
+      {tab === "positions" && <PositionsView rows={positions} onClose={closeOne} closing={closing} />}
       {tab === "orders" && <OrdersView rows={pending.rows} onCancel={pending.cancel} />}
       {tab === "history" && <HistoryView rows={history ?? []} />}
     </div>
@@ -113,7 +119,7 @@ export default function ActivityPanel() {
 
 const HEAD = ["幣種", "數量", "方向", "倉位價值", "開倉價格", "當前價格", "初始保證金", "倉位盈虧 (回報率)", "預估強平價", "止盈/止損", ""];
 
-function PositionsView({ rows, onClose }: { rows: PositionRow[]; onClose: (p: PositionRow) => void }) {
+function PositionsView({ rows, onClose, closing }: { rows: PositionRow[]; onClose: (p: PositionRow) => void; closing: Record<string, boolean> }) {
   const { address } = useAccount();
   const [tpsl, setTpsl] = useState<PositionRow | null>(null);
 
@@ -186,8 +192,12 @@ function PositionsView({ rows, onClose }: { rows: PositionRow[]; onClose: (p: Po
                   )}
                 </td>
                 <td className="px-3 py-2.5 text-right">
-                  <button onClick={() => onClose(p)} className="rounded border border-line px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-red/50 hover:text-red">
-                    市價平倉
+                  <button
+                    onClick={() => onClose(p)}
+                    disabled={!!closing[`${p.symbol}-${p.isLong}`]}
+                    className="rounded border border-line px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-red/50 hover:text-red disabled:opacity-50"
+                  >
+                    {closing[`${p.symbol}-${p.isLong}`] ? "平倉中…" : "市價平倉"}
                   </button>
                 </td>
               </tr>

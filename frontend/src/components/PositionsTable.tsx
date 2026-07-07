@@ -1,11 +1,15 @@
 "use client";
 
+import { useState } from "react";
+import { parseEther } from "viem";
 import { useAccount, usePublicClient, useReadContracts, useReadContract } from "wagmi";
 import toast from "react-hot-toast";
 import { ADDR, E18, MARKETS, b32, marketAbi, oracleAbi, routerAbi } from "@/config/contracts";
 import { useKubWrite } from "@/lib/kubWrite";
 import { errMsg, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
+import { gaslessAvailable, submitGaslessOrder } from "@/lib/gasless";
+import { useLivePrices } from "@/lib/cexPrice";
 
 const COMBOS = MARKETS.flatMap((m) => [
   { symbol: m.symbol, isLong: true },
@@ -17,6 +21,8 @@ export default function PositionsTable() {
   const client = usePublicClient();
   const { writeContract } = useKubWrite();
   const oneClick = useOneClick();
+  const livePrices = useLivePrices();
+  const [busyKey, setBusyKey] = useState<string | null>(null);
 
   const { data: minExecFee } = useReadContract({
     address: ADDR.router, abi: routerAbi, functionName: "minExecutionFee",
@@ -49,13 +55,33 @@ export default function PositionsTable() {
 
   const close = async (symbol: string, isLong: boolean, sizeUsd: bigint, mark: bigint) => {
     if (!address || !client) return;
+    const key = `${symbol}-${isLong}`;
+    if (busyKey) return; // ignore repeat clicks while a close is in flight
+    setBusyKey(key);
     try {
-      // 1% slippage bound on closes
-      const acceptable = mark > 0n
-        ? isLong ? mark - mark / 100n : mark + mark / 100n
+      // 1% slippage bound off the live price (oracle mark can be stale)
+      const live = livePrices[symbol];
+      const ref = live && live > 0 ? parseEther(live.toFixed(6)) : mark;
+      const acceptable = ref > 0n
+        ? isLong ? ref - ref / 100n : ref + ref / 100n
         : 0n;
       const fee = minExecFee ?? 0n;
 
+      // Gasless: agent signs, relayer submits & pays gas (mirrors the open flow)
+      if (oneClick.active && gaslessAvailable()) {
+        try {
+          await submitGaslessOrder({
+            owner: address, symbol, isLong, isIncrease: false,
+            collateralTokens: 0n, sizeDeltaUsd: sizeUsd, acceptablePrice: acceptable, client,
+          });
+          toast.success("Close submitted (gasless) — keeper executes at fresh price");
+          return;
+        } catch {
+          toast("Relayer unavailable — falling back");
+        }
+      }
+
+      // On-chain 1-click (agent pays its own gas)
       if (oneClick.active && oneClick.agentGas >= fee * 2n) {
         const agents = getAgentClients(address)!;
         const hash = await agents.wallet.writeContract({
@@ -78,6 +104,8 @@ export default function PositionsTable() {
       toast.success("Close queued");
     } catch (e) {
       toast.error(errMsg(e));
+    } finally {
+      setBusyKey(null);
     }
   };
 
@@ -121,9 +149,10 @@ export default function PositionsTable() {
                   <td className="px-3.5 py-2.5 text-right">
                     <button
                       onClick={() => close(r.symbol, r.isLong, r.pos.sizeUsd, r.mark)}
-                      className="rounded border border-line px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-red/50 hover:text-red"
+                      disabled={busyKey === `${r.symbol}-${r.isLong}`}
+                      className="rounded border border-line px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-red/50 hover:text-red disabled:opacity-50"
                     >
-                      Close
+                      {busyKey === `${r.symbol}-${r.isLong}` ? "Closing…" : "Close"}
                     </button>
                   </td>
                 </tr>

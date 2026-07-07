@@ -65,6 +65,7 @@ export const marketAbi = parseAbi([
   "function maintenanceMarginBps() view returns (uint256)",
   "function rapidCloseFeeBps() view returns (uint256)",
   "function rapidCloseWindow() view returns (uint256)",
+  "function minCollateralUsd() view returns (uint256)",
 ]);
 
 export const FEE_TIERS = ((CFG as { feeTiers?: { tier: number; name: string; discountBps: number }[] }).feeTiers)

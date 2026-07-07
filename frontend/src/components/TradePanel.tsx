@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { parseEther, formatEther } from "viem";
 import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import toast from "react-hot-toast";
 import {
-  ADDR, MARKETS, b32, erc20Abi, routerAbi, usdToToken, tokenToUsd,
+  ADDR, MARKETS, b32, erc20Abi, marketAbi, routerAbi, usdToToken, tokenToUsd,
 } from "@/config/contracts";
 import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
@@ -32,29 +32,71 @@ export default function TradePanel({ symbol }: { symbol: string }) {
   const account = useAccountSummary();
 
   const [isLong, setIsLong] = useState(true);
-  const [collateral, setCollateral] = useState("");
+  const [amount, setAmount] = useState("");
   const [lev, setLev] = useState(2);
   const [slipIdx, setSlipIdx] = useState(1);
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<"cost" | "size">("cost"); // input as collateral (cost) or position size
+  const [unit, setUnit] = useState<"usd" | "asset">("usd");   // size unit in size mode
+  const [showUnitPref, setShowUnitPref] = useState(false);
+  const [levOpen, setLevOpen] = useState(false);
+  const levRef = useRef<HTMLDivElement>(null);
 
   const maxLev = MARKETS.find((m) => m.symbol === symbol)?.maxLeverageX ?? 10;
-  const levClamped = Math.min(lev, maxLev);
-  const colNum = Number(collateral || "0");
-  const sizeUsd = colNum * levClamped;
+  const levClamped = Math.min(Math.max(lev, 1), maxLev);
 
   const { data: minExecFee } = useReadContract({
-    address: ADDR.router,
-    abi: routerAbi,
-    functionName: "minExecutionFee",
+    address: ADDR.router, abi: routerAbi, functionName: "minExecutionFee",
   });
-
+  const { data: minCollateral } = useReadContract({
+    address: ADDR.market, abi: marketAbi, functionName: "minCollateralUsd",
+  });
   const { data: balance } = useReadContract({
-    address: ADDR.kusdt,
-    abi: erc20Abi,
-    functionName: "balanceOf",
+    address: ADDR.kusdt, abi: erc20Abi, functionName: "balanceOf",
     args: address ? [address] : undefined,
     query: { enabled: !!address, refetchInterval: 8000 },
   });
+
+  const priceNum = Number(formatEther(price));
+  const availableUsd = oneClick.active
+    ? Number(formatEther(tokenToUsd(oneClick.balance)))
+    : balance !== undefined ? Number(formatEther(tokenToUsd(balance))) : 0;
+
+  // Derive collateral + position size from the chosen input mode/unit
+  const amt = Number(amount || "0");
+  let colNum: number, sizeUsd: number;
+  if (mode === "cost") {
+    colNum = amt;
+    sizeUsd = amt * levClamped;
+  } else {
+    sizeUsd = unit === "asset" ? amt * priceNum : amt;
+    colNum = levClamped > 0 ? sizeUsd / levClamped : 0;
+  }
+  const amountTokens = priceNum > 0 ? sizeUsd / priceNum : 0;
+  const maxLongUsd = availableUsd * levClamped;
+
+  // Default the input to the smallest openable position for this account:
+  // the min collateral (works for a tiny account too), capped by what's available.
+  const defaultedRef = useRef(false);
+  const minColUsd = minCollateral !== undefined ? Number(formatEther(tokenToUsd(minCollateral))) : 10;
+  useEffect(() => {
+    if (defaultedRef.current || amount !== "") return;
+    if (availableUsd > 0) {
+      defaultedRef.current = true;
+      setMode("cost");
+      setAmount(String(Math.min(minColUsd, Math.floor(availableUsd * 100) / 100)));
+    }
+  }, [availableUsd, minColUsd, amount]);
+
+  // Close the leverage popover on outside click
+  useEffect(() => {
+    if (!levOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (levRef.current && !levRef.current.contains(e.target as Node)) setLevOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [levOpen]);
 
   // liq. price estimate: loss ≈ collateral - maintenance → Δp/p = 1/lev - maint
   const maint = fees.maintenanceBps !== null ? fees.maintenanceBps / 10000 : 0.01;
@@ -64,13 +106,6 @@ export default function TradePanel({ symbol }: { symbol: string }) {
     const p = Number(formatEther(price));
     return isLong ? p * (1 - move) : p * (1 + move);
   })();
-
-  const priceNum = Number(formatEther(price));
-  const amountTokens = priceNum > 0 ? sizeUsd / priceNum : 0;
-  const availableUsd = oneClick.active
-    ? Number(formatEther(tokenToUsd(oneClick.balance)))
-    : balance !== undefined ? Number(formatEther(tokenToUsd(balance))) : 0;
-  const maxLongUsd = availableUsd * levClamped;
 
   const submit = async () => {
     if (!address || !client) return toast.error("Connect wallet first");
@@ -104,7 +139,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
           });
           await client.waitForTransactionReceipt({ hash });
           toast.success("Order queued (1-click) — keeper executes at next fresh price");
-          setCollateral("");
+          setAmount("");
           oneClick.refetch();
           return;
         }
@@ -131,7 +166,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
       });
       await client.waitForTransactionReceipt({ hash });
       toast.success("Order queued — keeper executes at next fresh price");
-      setCollateral("");
+      setAmount("");
     } catch (e) {
       toast.error(errMsg(e));
     } finally {
@@ -143,10 +178,45 @@ export default function TradePanel({ symbol }: { symbol: string }) {
 
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-panel">
-      {/* header: margin mode + leverage + order type */}
+      {/* header: margin mode + leverage (click to set) + order type */}
       <div className="flex items-center gap-2 border-b border-line px-3.5 py-2.5">
         <span className="rounded bg-panel2 px-2 py-1 text-[11px] font-medium">逐倉 Isolated</span>
-        <span className="tnum rounded bg-panel2 px-2 py-1 text-[11px] font-medium text-accent">{levClamped}×</span>
+        <div ref={levRef} className="relative">
+          <button
+            onClick={() => setLevOpen((v) => !v)}
+            className="tnum rounded bg-panel2 px-2 py-1 text-[11px] font-medium text-accent transition-colors hover:bg-accentDim"
+          >
+            {levClamped}× ▾
+          </button>
+          {levOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg border border-line bg-panel p-3 shadow-2xl">
+              <div className="eyebrow mb-2 flex justify-between">
+                <span>Leverage</span><span className="tnum text-accent">{levClamped}×</span>
+              </div>
+              <div className="grid grid-cols-4 gap-1">
+                {[1, 2, 3, 5, 10, 20, 50, 100].filter((v) => v <= maxLev).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setLev(v)}
+                    className={`tnum rounded py-1.5 text-[12px] transition-colors ${
+                      levClamped === v ? "bg-accent text-bg" : "bg-panel2 text-muted hover:text-fg"
+                    }`}
+                  >
+                    {v}×
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="number" min={1} max={maxLev} value={levClamped}
+                  onChange={(e) => setLev(Math.min(maxLev, Math.max(1, Number(e.target.value) || 1)))}
+                  className="tnum w-full rounded-md border border-line bg-bg px-2 py-1.5 text-[13px] outline-none focus:border-accent/60"
+                />
+                <span className="eyebrow shrink-0">max {maxLev}×</span>
+              </div>
+            </div>
+          )}
+        </div>
         <div className="flex-1" />
         <div className="flex gap-0.5 text-[12px]">
           <span className="rounded bg-accentDim px-2.5 py-1 font-medium text-accent">Market</span>
@@ -177,60 +247,83 @@ export default function TradePanel({ symbol }: { symbol: string }) {
       </div>
 
       <div className="flex flex-col gap-2.5 p-3 pt-1.5">
-        {/* cost */}
+        {/* input */}
         <div>
-          <div className="mb-1.5 flex justify-between text-[11px]">
-            <span className="eyebrow">Cost{oneClick.active ? " · 1-click" : ""}</span>
+          <div className="mb-1.5 flex items-center justify-between text-[11px]">
+            <button
+              onClick={() => setShowUnitPref((v) => !v)}
+              className="eyebrow flex items-center gap-1 transition-colors hover:text-fg"
+            >
+              {mode === "cost" ? "Cost" : "Order Size"}
+              {mode === "size" && unit === "asset" ? ` · ${symbol}` : " · USD"} ▾
+            </button>
             <span className="tnum text-muted">Available {fmtNum(availableUsd)} USD</span>
           </div>
+
+          {/* Unit Preference expander */}
+          {showUnitPref && (
+            <div className="mb-2 flex flex-col gap-2 rounded-md border border-line bg-bg p-2.5">
+              <div>
+                <div className="eyebrow mb-1">Order Size unit</div>
+                <div className="grid grid-cols-2 gap-1">
+                  <PrefBtn active={unit === "asset"} onClick={() => { setUnit("asset"); setMode("size"); }}>{symbol}</PrefBtn>
+                  <PrefBtn active={unit === "usd"} onClick={() => setUnit("usd")}>USD</PrefBtn>
+                </div>
+                <p className="mt-1 text-[10.5px] leading-snug text-mutedDim">
+                  Input and display order size in {unit === "asset" ? symbol : "USD"}.
+                </p>
+              </div>
+              <div>
+                <div className="eyebrow mb-1">Input by</div>
+                <div className="grid grid-cols-2 gap-1">
+                  <PrefBtn active={mode === "size"} onClick={() => setMode("size")}>Order Size</PrefBtn>
+                  <PrefBtn active={mode === "cost"} onClick={() => setMode("cost")}>Cost</PrefBtn>
+                </div>
+                <p className="mt-1 text-[10.5px] leading-snug text-mutedDim">
+                  {mode === "cost"
+                    ? "Enter the cost (collateral, trading fee included); size = cost × leverage."
+                    : "Enter the position size; collateral = size ÷ leverage."}
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent/60">
             <input
-              type="number" min="0" placeholder="0.00" value={collateral}
-              onChange={(e) => setCollateral(e.target.value)}
+              type="number" min="0" placeholder="0.00" value={amount}
+              onChange={(e) => setAmount(e.target.value)}
               className="tnum w-full bg-transparent py-2.5 text-[15px] outline-none"
             />
-            <span className="eyebrow">USD</span>
+            <span className="eyebrow">{mode === "size" && unit === "asset" ? symbol : "USD"}</span>
           </div>
-          <div className="mt-1.5 grid grid-cols-5 gap-1">
-            {COST_PRESETS.map((v) => (
-              <button
-                key={v}
-                onClick={() => setCollateral(String(v))}
-                className="tnum rounded bg-panel2 py-1.5 text-[11.5px] text-muted transition-colors hover:text-fg"
-              >
-                ${v}
-              </button>
-            ))}
-            <button
-              onClick={() => setCollateral(String(Math.floor(availableUsd * 100) / 100))}
-              className="tnum rounded bg-panel2 py-1.5 text-[11.5px] text-accent transition-colors hover:opacity-80"
-            >
-              Max
-            </button>
-          </div>
-        </div>
 
-        {/* leverage */}
-        <div>
-          <div className="mb-2 flex justify-between text-[11px]">
-            <span className="eyebrow">Leverage</span>
-            <span className="tnum font-medium text-accent">{levClamped}×</span>
-          </div>
-          <input
-            type="range" min={1} max={maxLev} step={1} value={levClamped}
-            onChange={(e) => setLev(Number(e.target.value))}
-            className="w-full"
-          />
-          <div className="eyebrow mt-1.5 flex justify-between">
-            <span>1×</span><span>{maxLev}×</span>
-          </div>
+          {(mode === "cost" || unit === "usd") && (
+            <div className="mt-1.5 grid grid-cols-5 gap-1">
+              {COST_PRESETS.map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setAmount(String(v))}
+                  className="tnum rounded bg-panel2 py-1.5 text-[11.5px] text-muted transition-colors hover:text-fg"
+                >
+                  ${v}
+                </button>
+              ))}
+              <button
+                onClick={() => setAmount(String(Math.floor((mode === "cost" ? availableUsd : maxLongUsd) * 100) / 100))}
+                className="tnum rounded bg-panel2 py-1.5 text-[11.5px] text-accent transition-colors hover:opacity-80"
+              >
+                Max
+              </button>
+            </div>
+          )}
         </div>
 
         {/* order preview */}
         <div className="flex flex-col gap-1.5 rounded-md bg-bg px-3 py-3 text-[12px]">
           <Row k={`Amount (${symbol})`} v={amountTokens > 0 ? `≈ ${fmtNum(amountTokens, 6)} ${symbol}` : "—"} />
           <Row k="Order value" v={sizeUsd ? `${fmtNum(sizeUsd)} USD` : "—"} />
-          <Row k="Max long" v={maxLongUsd > 0 ? `${fmtNum(maxLongUsd, 0)} USD` : "—"} />
+          <Row k="Cost (collateral)" v={colNum > 0 ? `${fmtNum(colNum)} USD` : "—"} />
+          <Row k={`Max ${isLong ? "long" : "short"}`} v={maxLongUsd > 0 ? `${fmtNum(maxLongUsd, 0)} USD` : "—"} />
           <Row k="Est. liq. price" v={liqPrice ? `$${fmtNum(liqPrice, liqPrice >= 100 ? 1 : 4)}` : "—"} accent />
           <Row k="TP / SL" v="None" />
         </div>
@@ -301,6 +394,19 @@ export default function TradePanel({ symbol }: { symbol: string }) {
         <Row k="Account value" v={`${fmtUsd(account.accountValueUsd)} USD`} accent />
       </Section>
     </div>
+  );
+}
+
+function PrefBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-md py-1.5 text-[12px] font-medium transition-colors ${
+        active ? "bg-accentDim text-accent" : "bg-panel2 text-muted hover:text-fg"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

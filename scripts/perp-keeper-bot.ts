@@ -323,9 +323,10 @@ function startRelayer(router: any, oracle: any, maxDeviationBps: bigint, keeperS
           throw err;
         }
       } catch (e: any) {
-        console.error(`[${now()}] relay failed: ${e.shortMessage ?? e.message ?? e}`);
+        const reason = e.reason ?? e.revert?.args?.[0] ?? e.info?.error?.message ?? e.shortMessage ?? e.message ?? String(e);
+        console.error(`[${now()}] relay failed: ${reason}`);
         res.writeHead(400, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: e.shortMessage ?? e.message ?? String(e) }));
+        res.end(JSON.stringify({ error: reason }));
       }
     });
   });

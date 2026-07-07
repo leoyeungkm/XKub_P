@@ -62,19 +62,22 @@ export default function PositionsTable() {
       const acceptable = 0n;
       const fee = minExecFee ?? 0n;
 
-      // Gasless: agent signs, relayer submits & pays gas (mirrors the open flow)
+      // Gasless: agent signs, relayer pays gas. Retry once on a transient failure;
+      // don't fall back to the wallet path (it needs owner KUB + an execution fee).
       if (oneClick.active && gaslessAvailable()) {
+        const gasless = () => submitGaslessOrder({
+          owner: address, symbol, isLong, isIncrease: false,
+          collateralTokens: 0n, sizeDeltaUsd: sizeUsd, acceptablePrice: acceptable, client,
+        });
         try {
-          await submitGaslessOrder({
-            owner: address, symbol, isLong, isIncrease: false,
-            collateralTokens: 0n, sizeDeltaUsd: sizeUsd, acceptablePrice: acceptable, client,
-          });
-          toast.success("Close submitted (gasless) — keeper executes at fresh price");
-          refreshPositions();
-          return;
+          await gasless();
         } catch {
-          toast("Relayer unavailable — falling back");
+          await new Promise((r) => setTimeout(r, 1500));
+          await gasless();
         }
+        toast.success("Close submitted (gasless) — keeper executes at fresh price");
+        refreshPositions();
+        return;
       }
 
       // On-chain 1-click (agent pays its own gas)

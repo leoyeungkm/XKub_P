@@ -129,19 +129,22 @@ export default function TradePanel({ symbol }: { symbol: string }) {
 
       const fee = minExecFee ?? 0n;
 
-      // Gasless path: agent signs, relayer submits & pays gas (no KUB needed)
+      // Gasless path: agent signs, relayer submits & pays gas (no KUB needed).
+      // Retry once on a transient failure before falling back.
       if (oneClick.active && gaslessAvailable() && oneClick.balance >= collateralTokens) {
+        const gasless = () => submitGaslessOrder({
+          owner: address, symbol, isLong, isIncrease: true,
+          collateralTokens, sizeDeltaUsd: sizeUsd18, acceptablePrice: acceptable, client,
+        });
         try {
-          await submitGaslessOrder({
-            owner: address, symbol, isLong, isIncrease: true,
-            collateralTokens, sizeDeltaUsd: sizeUsd18, acceptablePrice: acceptable, client,
-          });
+          try { await gasless(); }
+          catch { await new Promise((r) => setTimeout(r, 1500)); await gasless(); }
           toast.success("Order submitted (gasless) — keeper executes at fresh price");
           setAmount("");
           oneClick.refetch();
           refreshPositions();
           return;
-        } catch (e) {
+        } catch {
           toast("Relayer unavailable — falling back to on-chain 1-click");
         }
       }

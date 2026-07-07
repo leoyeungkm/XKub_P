@@ -46,17 +46,24 @@ export default function ActivityPanel() {
       // (validated ≤20% of last on-chain), so a tight slippage here only causes
       // spurious "price bound" reverts when the price ticks between click & fill.
       const acceptable = 0n;
-      // Gasless close: agent signs, relayer submits & pays gas
+      // Gasless close: agent signs, relayer submits & pays gas. If it fails
+      // (transient relayer/nonce race), retry once with a fresh nonce+price —
+      // do NOT fall back to the wallet path, which needs owner KUB + an execution
+      // fee the gasless user hasn't budgeted ("total cost exceeds balance").
       if (oneClick.active && gaslessAvailable()) {
+        const gasless = () => submitGaslessOrder({
+          owner: address, symbol: p.symbol, isLong: p.isLong, isIncrease: false,
+          collateralTokens: 0n, sizeDeltaUsd: p.sizeUsd, acceptablePrice: acceptable, client,
+        });
         try {
-          await submitGaslessOrder({
-            owner: address, symbol: p.symbol, isLong: p.isLong, isIncrease: false,
-            collateralTokens: 0n, sizeDeltaUsd: p.sizeUsd, acceptablePrice: acceptable, client,
-          });
-          toast.success("Close submitted (gasless)");
-          refreshPositions();
-          return;
-        } catch { toast("Relayer unavailable — using on-chain 1-click"); }
+          await gasless();
+        } catch {
+          await new Promise((r) => setTimeout(r, 1500)); // let nonce/price settle
+          await gasless(); // throws to the outer catch if it still fails
+        }
+        toast.success("Close submitted (gasless)");
+        refreshPositions();
+        return;
       }
       if (oneClick.active && oneClick.agentGas >= fee * 2n) {
         const agents = getAgentClients(address)!;

@@ -128,6 +128,9 @@ export const RELAYER_URL = (CFG as { relayerUrl?: string }).relayerUrl ?? "";
 // (the wallet still returns a hash, so the dapp hangs waiting for a receipt that
 // never comes). Force legacy (Type-0) with an explicit gasPrice on every write
 // that goes through a user's injected wallet.
+const GWEI = 1_000_000_000n;
+const MIN_GAS_PRICE = 100n * GWEI; // floor — testnet drops anything too cheap
+
 export async function kubTxOverrides(
   client: { getGasPrice: () => Promise<bigint> },
 ): Promise<{ type: "legacy"; gasPrice: bigint }> {
@@ -135,10 +138,12 @@ export async function kubTxOverrides(
   try {
     gasPrice = await client.getGasPrice();
   } catch {
-    gasPrice = 60_000_000_000n; // 60 gwei fallback (testnet min ~50)
+    gasPrice = 185n * GWEI; // typical testnet reading
   }
-  // 15% headroom so a tick-up between quote and mine doesn't strand the tx.
-  return { type: "legacy", gasPrice: (gasPrice * 115n) / 100n };
+  // 2x headroom so a spike between quote and mine can't strand the tx (testnet
+  // gas is cheap), and never below the floor.
+  const bumped = gasPrice * 2n;
+  return { type: "legacy", gasPrice: bumped > MIN_GAS_PRICE ? bumped : MIN_GAS_PRICE };
 }
 
 // keccak256(abi.encodePacked(owner, marketId, isLong)) — matches the router

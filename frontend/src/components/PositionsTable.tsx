@@ -9,6 +9,7 @@ import { useKubWrite } from "@/lib/kubWrite";
 import { errMsg, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
 import { gaslessAvailable, submitGaslessOrder } from "@/lib/gasless";
+import { refreshPositions } from "@/lib/portfolio";
 import { useLivePrices } from "@/lib/cexPrice";
 
 const COMBOS = MARKETS.flatMap((m) => [
@@ -75,6 +76,7 @@ export default function PositionsTable() {
             collateralTokens: 0n, sizeDeltaUsd: sizeUsd, acceptablePrice: acceptable, client,
           });
           toast.success("Close submitted (gasless) — keeper executes at fresh price");
+          refreshPositions();
           return;
         } catch {
           toast("Relayer unavailable — falling back");

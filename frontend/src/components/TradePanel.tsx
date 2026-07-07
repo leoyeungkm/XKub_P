@@ -11,7 +11,7 @@ import {
 import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
 import { gaslessAvailable, submitGaslessOrder } from "@/lib/gasless";
-import { useAccountSummary } from "@/lib/portfolio";
+import { useAccountSummary, refreshPositions } from "@/lib/portfolio";
 import { useMarketFees, useMyFee, useOraclePrice } from "./MarketBar";
 import { useDisplayPrice } from "@/lib/cexPrice";
 
@@ -138,6 +138,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
           toast.success("Order submitted (gasless) — keeper executes at fresh price");
           setAmount("");
           oneClick.refetch();
+          refreshPositions();
           return;
         } catch (e) {
           toast("Relayer unavailable — falling back to on-chain 1-click");
@@ -161,6 +162,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
           toast.success("Order queued (1-click) — keeper executes at next fresh price");
           setAmount("");
           oneClick.refetch();
+          refreshPositions();
           return;
         }
       }
@@ -187,6 +189,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
       await client.waitForTransactionReceipt({ hash });
       toast.success("Order queued — keeper executes at next fresh price");
       setAmount("");
+      refreshPositions();
     } catch (e) {
       toast.error(errMsg(e));
     } finally {

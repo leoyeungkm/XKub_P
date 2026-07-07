@@ -2,6 +2,7 @@
 
 // Aggregates a trader's account: balances, open positions, unrealized PnL,
 // and (from event logs) realized PnL + trade/funding history.
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { parseEther } from "viem";
 import { useAccount, usePublicClient, useReadContract, useReadContracts } from "wagmi";
@@ -25,10 +26,16 @@ export type PositionRow = {
   collateralUsd: bigint; entry: bigint; mark: bigint; pnl: bigint;
 };
 
+// Fire this right after an order is submitted so open positions / closed rows
+// update as soon as the tx mines, instead of on the next poll interval.
+export const refreshPositions = () => {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("xkub:refresh"));
+};
+
 export function usePositions() {
   const { address } = useAccount();
   const cex = useLivePrices(); // BTC/ETH via Binance WS (real-time), KUB via relayer
-  const { data } = useReadContracts({
+  const { data, refetch } = useReadContracts({
     contracts: COMBOS.flatMap((c) => [
       { address: ADDR.market, abi: marketAbi, functionName: "getPosition", args: [address!, b32(c.symbol), c.isLong] },
       { address: ADDR.market, abi: marketAbi, functionName: "getPositionPnl", args: [address!, b32(c.symbol), c.isLong] },
@@ -36,6 +43,14 @@ export function usePositions() {
     ]) as never[],
     query: { enabled: !!address, refetchInterval: 5000 },
   });
+
+  // On submit, poll a few times over the next several seconds so the position
+  // shows the moment its tx mines (KUB ~3s block) rather than up to 5s later.
+  useEffect(() => {
+    const burst = () => [0, 1500, 3500, 6000].forEach((d) => setTimeout(() => refetch(), d));
+    window.addEventListener("xkub:refresh", burst);
+    return () => window.removeEventListener("xkub:refresh", burst);
+  }, [refetch]);
 
   const rows: PositionRow[] = COMBOS.map((c, i) => {
     const pos = data?.[i * 3]?.result as { sizeUsd: bigint; sizeTokens: bigint; collateralUsd: bigint } | undefined;

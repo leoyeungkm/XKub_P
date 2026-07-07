@@ -10,7 +10,7 @@ import { useKubWrite } from "@/lib/kubWrite";
 import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
 import { gaslessAvailable, submitGaslessOrder } from "@/lib/gasless";
-import { usePositions, useHistory, type PositionRow, type HistoryItem } from "@/lib/portfolio";
+import { usePositions, useHistory, refreshPositions, type PositionRow, type HistoryItem } from "@/lib/portfolio";
 import TpSlModal from "./TpSlModal";
 
 type Tab = "positions" | "orders" | "history";
@@ -47,6 +47,7 @@ export default function ActivityPanel() {
             collateralTokens: 0n, sizeDeltaUsd: p.sizeUsd, acceptablePrice: acceptable, client,
           });
           toast.success("Close submitted (gasless)");
+          refreshPositions();
           return;
         } catch { toast("Relayer unavailable — using on-chain 1-click"); }
       }

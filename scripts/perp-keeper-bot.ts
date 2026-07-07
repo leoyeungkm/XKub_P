@@ -215,7 +215,22 @@ async function signPrice(oracle: any, signer: any, marketId: string, price: bigi
 // ─── Gasless relayer (HTTP) ────────────────────────────────────────────────────
 // Accepts agent-signed orders from the frontend and submits them on-chain,
 // paying the gas. The trader never needs KUB. CORS-open for the dapp.
-function startRelayer(router: any) {
+// Post a fresh price for one market right before executing an order. The keeper
+// posts conditionally (idle → no post), so the on-chain price can be stale when
+// a gasless order arrives; without this, executeSignedOrder reverts "stale price".
+async function postFreshPrice(oracle: any, marketId: string, maxDeviationBps: bigint) {
+  const prices = latestPrices ?? await fetchPrices();
+  latestPrices = prices;
+  const sym = ethers.decodeBytes32String(marketId) as Sym;
+  const cex = toWei(prices[sym]);
+  const [last] = await oracle.peekPrice(marketId);
+  const value = step(last, cex, maxDeviationBps);
+  await (await oracle.setPrices([marketId], [value])).wait();
+  lastPostAt = Date.now();
+  console.log(`[${now()}] pre-exec price ${sym}=$${Number(ethers.formatEther(value)).toFixed(sym === "KUB" ? 4 : 0)}`);
+}
+
+function startRelayer(router: any, oracle: any, maxDeviationBps: bigint) {
   const submitted = new Set<string>(); // simple in-flight/replay guard
   const server = http.createServer(async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -243,6 +258,8 @@ function startRelayer(router: any) {
         if (submitted.has(key)) { res.writeHead(409); return res.end(JSON.stringify({ error: "duplicate" })); }
         submitted.add(key); // in-flight guard; the on-chain nonce is the real replay protection
         try {
+          // Refresh the oracle for this market so execution doesn't hit "stale price".
+          await postFreshPrice(oracle, o.marketId, maxDeviationBps);
           const tx = await router.executeSignedOrder(o, sig);
           const rcpt = await tx.wait();
           console.log(`[${now()}] relayed ${o.isIncrease ? "open" : "close"} for ${o.owner} #${o.nonce}`);
@@ -279,7 +296,7 @@ async function main() {
   // Safety margin below the on-chain cap (race with a second keeper)
   const maxDeviationBps = ((await oracle.maxDeviationBps()) * 9n) / 10n;
 
-  startRelayer(router); // gasless: accept agent-signed orders over HTTP
+  startRelayer(router, oracle, maxDeviationBps); // gasless: accept agent-signed orders over HTTP
 
   // eslint-disable-next-line no-constant-condition
   while (true) {

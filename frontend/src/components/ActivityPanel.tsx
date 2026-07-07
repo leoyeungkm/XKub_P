@@ -170,7 +170,7 @@ function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[
   const pendRow = (pp: PendingOpen) => {
     const lev = pp.collateralUsd > 0n ? Number(pp.sizeUsd) / Number(pp.collateralUsd) : 0;
     return (
-      <tr key={`pending-${pp.symbol}-${pp.isLong}`} className="border-b border-lineSoft last:border-0 animate-pulse text-mutedDim">
+      <tr key={`pending-${pp.symbol}-${pp.isLong}`} className="border-b border-lineSoft last:border-0 bg-panel2/30 text-mutedDim">
         <td className="px-3 py-2.5 font-medium">{pp.symbol}-PERP</td>
         <td className="tnum px-3 py-2.5">—</td>
         <td className="px-3 py-2.5">
@@ -183,7 +183,10 @@ function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[
         <td className="px-3 py-2.5">—</td>
         <td className="tnum px-3 py-2.5">{fmtUsd(pp.collateralUsd)} USD</td>
         <td className="px-3 py-2.5" colSpan={4}>
-          <span className="rounded bg-panel2 px-2 py-0.5 text-[11px] text-accent">確認中 · Confirming…</span>
+          <span className="inline-flex items-center gap-1.5 rounded bg-panel2 px-2 py-0.5 text-[11px] text-accent">
+            <span className="h-2.5 w-2.5 shrink-0 animate-spin rounded-full border border-accent/30 border-t-accent" />
+            確認中 · Confirming…
+          </span>
         </td>
       </tr>
     );

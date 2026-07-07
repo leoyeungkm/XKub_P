@@ -12,6 +12,7 @@ import { getAgentClients, useOneClick } from "@/lib/oneclick";
 import { gaslessAvailable, submitGaslessOrder } from "@/lib/gasless";
 import { useAccountSummary } from "@/lib/portfolio";
 import { useMarketFees, useMyFee, useOraclePrice } from "./MarketBar";
+import { useDisplayPrice } from "@/lib/cexPrice";
 
 const SLIPPAGE_OPTS = [
   { label: "0.3%", bps: 30n },
@@ -26,7 +27,8 @@ export default function TradePanel({ symbol }: { symbol: string }) {
   const { address } = useAccount();
   const client = usePublicClient();
   const { writeContractAsync } = useWriteContract();
-  const price = useOraclePrice(symbol);
+  const oraclePrice = useOraclePrice(symbol);
+  const price = useDisplayPrice(symbol, oraclePrice); // live CEX for preview, oracle fallback
   const fees = useMarketFees(symbol);
   const myFee = useMyFee();
   const oneClick = useOneClick();

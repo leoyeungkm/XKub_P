@@ -3,6 +3,7 @@
 import { useAccount, useReadContract, useReadContracts } from "wagmi";
 import { ADDR, FEE_TIERS, MARKETS, b32, marketAbi, oracleAbi, poolAbi } from "@/config/contracts";
 import { fmtPrice, fmtUsd } from "@/lib/format";
+import { useDisplayPrice } from "@/lib/cexPrice";
 
 /** The connected trader's effective (tier-discounted) fee and VIP tier. */
 export function useMyFee() {
@@ -82,7 +83,8 @@ export default function MarketBar({
   current: string;
   onChange: (s: string) => void;
 }) {
-  const price = useOraclePrice(current);
+  const oraclePrice = useOraclePrice(current);
+  const price = useDisplayPrice(current, oraclePrice); // live CEX, fallback oracle
   const fees = useMarketFees(current);
   const { data: state } = useReadContract({
     address: ADDR.market,
@@ -121,7 +123,7 @@ export default function MarketBar({
         <div className="tnum text-[22px] font-semibold leading-none text-accent">
           {price > 0n ? fmtPrice(price) : "—"}
         </div>
-        <div className="eyebrow mt-1">{current}-PERP · Mark</div>
+        <div className="eyebrow mt-1">{current}-PERP · Index</div>
       </div>
 
       {/* stat cells */}

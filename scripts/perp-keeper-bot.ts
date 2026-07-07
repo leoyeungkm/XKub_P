@@ -86,17 +86,49 @@ function loadDeployment(): any {
 
 // ─── duties ──────────────────────────────────────────────────────────────────
 
-async function pushPrices(oracle: any, maxDeviationBps: bigint) {
-  const prices = await fetchPrices();
+// Latest off-chain CEX prices — served to the frontend at /prices so the UI
+// ticker moves even when we're not posting on-chain.
+let latestPrices: Record<Sym, number> | null = null;
+
+const DEVIATION_BPS = 20;    // post if CEX moved ≥0.2% from the on-chain price
+const HEARTBEAT_MS  = 60000; // ...or at least this often while there's activity
+let lastPostAt = 0;
+
+/** Post prices ONLY when needed: there must be a pending order or open position
+ *  (otherwise nobody needs a fresh price), and the price must have moved past
+ *  the deviation band or the heartbeat elapsed. Idle → zero gas. */
+async function maybePushPrices(oracle: any, router: any, market: any, maxDeviationBps: bigint) {
+  const prices = await fetchPrices(); // free, off-chain
+  latestPrices = prices;
+
+  const hasPending = (await router.getPendingRequests(1)).length > 0;
+  const hasPositions = (await market.openPositionCount()) > 0n;
+  if (!hasPending && !hasPositions) {
+    console.log(`[${now()}] idle — no on-chain post (0 gas)`);
+    return; // nobody needs a fresh price
+  }
+
   const ids: string[] = [];
   const values: bigint[] = [];
+  let deviated = false;
   for (const sym of MARKETS) {
     const id = ethers.encodeBytes32String(sym);
     const [last] = await oracle.peekPrice(id);
+    const cex = toWei(prices[sym]);
+    if (last === 0n || (last > 0n && (cex > last ? cex - last : last - cex) * 10000n / last >= BigInt(DEVIATION_BPS))) {
+      deviated = true;
+    }
     ids.push(id);
-    values.push(step(last, toWei(prices[sym]), maxDeviationBps));
+    values.push(step(last, cex, maxDeviationBps));
   }
+
+  const heartbeat = Date.now() - lastPostAt >= HEARTBEAT_MS;
+  if (!hasPending && !deviated && !heartbeat) {
+    return; // positions open but price stable and within heartbeat — skip
+  }
+
   await (await oracle.setPrices(ids, values)).wait();
+  lastPostAt = Date.now();
   console.log(`[${now()}] prices: ` +
     MARKETS.map((s, i) => `${s}=$${Number(ethers.formatEther(values[i])).toFixed(s === "KUB" ? 4 : 0)}`).join(" "));
 }
@@ -168,6 +200,11 @@ function startRelayer(router: any) {
     res.setHeader("Access-Control-Allow-Headers", "content-type");
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
     if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
+    // Live CEX prices for the UI ticker (moves even when we're not posting on-chain)
+    if (req.method === "GET" && req.url?.startsWith("/prices")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify(latestPrices ?? {}));
+    }
     if (req.method !== "POST" || !req.url?.startsWith("/order")) { res.writeHead(404); return res.end(); }
 
     let body = "";
@@ -224,7 +261,7 @@ async function main() {
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    try { await pushPrices(oracle, maxDeviationBps); }
+    try { await maybePushPrices(oracle, router, market, maxDeviationBps); }
     catch (e: any) { console.error(`[${now()}] price round failed: ${e.message ?? e}`); }
 
     try { await executePending(router); }

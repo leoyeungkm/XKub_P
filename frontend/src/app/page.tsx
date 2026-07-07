@@ -18,13 +18,13 @@ export default function Home() {
     <>
       <Header />
       <MarketBar current={market} onChange={setMarket} />
-      <main className="mx-auto grid max-w-[1500px] grid-cols-1 gap-3.5 p-5 lg:grid-cols-[1fr_340px]">
-        <div className="flex flex-col gap-3.5">
+      <main className="mx-auto grid max-w-[1560px] grid-cols-1 gap-2.5 p-2.5 lg:grid-cols-[1fr_320px]">
+        <div className="flex min-w-0 flex-col gap-2.5">
           <Chart symbol={market} />
           <PositionsTable />
           <RequestsTable />
         </div>
-        <div className="flex flex-col gap-3.5">
+        <div className="flex flex-col gap-2.5">
           <TradePanel symbol={market} />
           <OneClickPanel />
           <EarnPanel />

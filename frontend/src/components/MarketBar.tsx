@@ -62,37 +62,67 @@ export default function MarketBar({
     query: { refetchInterval: 8000 },
   });
 
+  const longOi = state ? Number(fmtUsd(state[0], 0).replace(/,/g, "")) : 0;
+  const shortOi = state ? Number(fmtUsd(state[1], 0).replace(/,/g, "")) : 0;
+  const totalOi = longOi + shortOi;
+  const longPct = totalOi > 0 ? (longOi / totalOi) * 100 : 50;
+
   return (
-    <div className="flex items-center gap-2 border-b border-line px-5 py-2.5">
-      {MARKETS.map((m) => (
-        <button
-          key={m.symbol}
-          onClick={() => onChange(m.symbol)}
-          className={`rounded-lg border px-4 py-2 font-semibold ${
-            m.symbol === current
-              ? "border-accent bg-panel2 text-fg"
-              : "border-transparent bg-panel text-muted hover:text-fg"
-          }`}
-        >
-          {m.symbol}-PERP
-        </button>
-      ))}
-      <div className="ml-4 text-xl font-bold">
-        {price > 0n ? `$${fmtPrice(price)}` : "—"}
+    <div className="flex flex-wrap items-stretch gap-x-6 gap-y-3 border-b border-line px-5 py-3">
+      {/* market selector */}
+      <div className="flex items-center gap-1.5">
+        {MARKETS.map((m) => (
+          <button
+            key={m.symbol}
+            onClick={() => onChange(m.symbol)}
+            className={`rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${
+              m.symbol === current
+                ? "bg-accentDim text-accent"
+                : "text-muted hover:bg-panel2 hover:text-fg"
+            }`}
+          >
+            {m.symbol}
+          </button>
+        ))}
       </div>
-      {state && (
-        <div className="ml-3.5 text-xs leading-relaxed text-muted">
-          Long OI: {fmtUsd(state[0], 0)} · Short OI: {fmtUsd(state[1], 0)}
+
+      {/* price */}
+      <div className="flex flex-col justify-center">
+        <div className="tnum text-[22px] font-semibold leading-none text-accent">
+          {price > 0n ? fmtPrice(price) : "—"}
         </div>
-      )}
-      {fees.longRatePerHour !== null && (
-        <div className="ml-3.5 text-xs leading-relaxed text-muted">
-          Borrow /h:{" "}
-          <span className="text-green">L {fees.longRatePerHour!.toFixed(4)}%</span>
-          {" · "}
-          <span className="text-red">S {fees.shortRatePerHour!.toFixed(4)}%</span>
+        <div className="eyebrow mt-1">{current}-PERP · Mark</div>
+      </div>
+
+      {/* stat cells */}
+      <Metric label="Long OI">{state ? fmtUsd(state[0], 0) : "—"}</Metric>
+      <Metric label="Short OI">{state ? fmtUsd(state[1], 0) : "—"}</Metric>
+      <Metric label="Borrow /h · L">
+        <span className="text-green">{fees.longRatePerHour !== null ? `${fees.longRatePerHour.toFixed(4)}%` : "—"}</span>
+      </Metric>
+      <Metric label="Borrow /h · S">
+        <span className="text-red">{fees.shortRatePerHour !== null ? `${fees.shortRatePerHour.toFixed(4)}%` : "—"}</span>
+      </Metric>
+
+      {/* signature: long/short skew bar */}
+      <div className="flex min-w-[150px] flex-1 flex-col justify-center">
+        <div className="eyebrow mb-1.5 flex justify-between">
+          <span className="text-green">{longPct.toFixed(0)}% L</span>
+          <span className="text-red">{(100 - longPct).toFixed(0)}% S</span>
         </div>
-      )}
+        <div className="flex h-1.5 overflow-hidden rounded-full bg-redDim">
+          <div className="bg-green transition-all duration-500" style={{ width: `${longPct}%` }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Metric({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col justify-center">
+      <div className="eyebrow mb-1">{label}</div>
+      <div className="tnum text-[13px] font-medium">{children}</div>
     </div>
   );
 }

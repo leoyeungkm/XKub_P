@@ -72,42 +72,46 @@ export default function EarnPanel() {
   };
 
   return (
-    <div className="overflow-hidden rounded-[10px] border border-line bg-panel">
-      <h3 className="border-b border-line px-3.5 py-3 text-xs uppercase tracking-widest text-muted">
-        Earn — XPLP Liquidity Pool
+    <div className="overflow-hidden rounded-lg border border-line bg-panel">
+      <h3 className="eyebrow border-b border-line px-3.5 py-2.5">
+        Earn · XPLP Pool
       </h3>
       <div className="flex flex-col gap-2.5 p-3.5">
-        <div className="grid grid-cols-2 gap-2 text-[12.5px]">
-          <Stat k="Pool value" v={poolValue !== undefined ? `${fmtUsd(poolValue, 0)} USD` : "—"} />
+        <div className="grid grid-cols-2 gap-1.5">
+          <Stat k="Pool value" v={poolValue !== undefined ? fmtUsd(poolValue, 0) : "—"} unit="USD" />
           <Stat k="XPLP price" v={sharePrice !== undefined ? `$${Number(formatEther(sharePrice)).toFixed(4)}` : "—"} />
           <Stat k="Your XPLP" v={myPlp !== undefined ? fmtUsd(myPlp) : "—"} />
           <Stat
             k="Your value"
             v={myPlp !== undefined && sharePrice !== undefined
-              ? `${fmtUsd((myPlp * sharePrice) / E18)} USD` : "—"}
+              ? fmtUsd((myPlp * sharePrice) / E18) : "—"}
+            unit="USD"
           />
         </div>
-        <input
-          type="number" min="0" placeholder="KUSDT / XPLP amount" value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className="w-full rounded-lg border border-line bg-bg px-3 py-2.5 outline-none focus:border-accent"
-        />
-        <div className="flex gap-2">
+        <div className="flex items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent/60">
+          <input
+            type="number" min="0" placeholder="0.00" value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="tnum w-full bg-transparent py-2.5 outline-none"
+          />
+          <span className="eyebrow">KUSDT / XPLP</span>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
           <button
             onClick={() => run("deposit")} disabled={busy}
-            className="flex-1 rounded-lg border border-line bg-panel2 py-2.5 font-semibold hover:border-accent disabled:opacity-50"
+            className="rounded-md bg-accentDim py-2.5 text-[13px] font-semibold text-accent transition-opacity hover:opacity-90 disabled:opacity-40"
           >
             Deposit
           </button>
           <button
             onClick={() => run("withdraw")} disabled={busy}
-            className="flex-1 rounded-lg border border-line bg-panel2 py-2.5 font-semibold hover:border-accent disabled:opacity-50"
+            className="rounded-md border border-line py-2.5 text-[13px] font-semibold text-muted transition-colors hover:text-fg disabled:opacity-40"
           >
             Withdraw
           </button>
         </div>
-        <div className="text-[11.5px] text-muted">
-          LPs are the counterparty to all trades and earn all fees.
+        <div className="text-[11px] leading-relaxed text-mutedDim">
+          LPs are the counterparty to every trade and earn all fees.
           15-minute withdraw cooldown after each deposit.
         </div>
       </div>
@@ -115,11 +119,13 @@ export default function EarnPanel() {
   );
 }
 
-function Stat({ k, v }: { k: string; v: string }) {
+function Stat({ k, v, unit }: { k: string; v: string; unit?: string }) {
   return (
-    <div className="rounded-lg bg-bg px-2.5 py-2">
-      <div className="text-[11px] text-muted">{k}</div>
-      <div>{v}</div>
+    <div className="rounded-md bg-bg px-2.5 py-2">
+      <div className="eyebrow mb-0.5">{k}</div>
+      <div className="tnum text-[13px]">
+        {v}{unit && <span className="ml-1 text-[10px] text-mutedDim">{unit}</span>}
+      </div>
     </div>
   );
 }

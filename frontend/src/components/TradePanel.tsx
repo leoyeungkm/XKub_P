@@ -127,88 +127,97 @@ export default function TradePanel({ symbol }: { symbol: string }) {
   };
 
   return (
-    <div className="overflow-hidden rounded-[10px] border border-line bg-panel">
-      <div className="flex">
+    <div className="overflow-hidden rounded-lg border border-line bg-panel">
+      <div className="grid grid-cols-2 gap-1 p-1">
         <button
           onClick={() => setIsLong(true)}
-          className={`flex-1 py-3 text-[15px] font-bold ${
-            isLong ? "bg-greenDim text-green shadow-[inset_0_-2px_0_#22c98a]" : "bg-panel2 text-muted"
+          className={`rounded-md py-2.5 text-[14px] font-semibold transition-colors ${
+            isLong ? "bg-greenDim text-green" : "text-muted hover:text-fg"
           }`}
         >
           Long
         </button>
         <button
           onClick={() => setIsLong(false)}
-          className={`flex-1 py-3 text-[15px] font-bold ${
-            !isLong ? "bg-redDim text-red shadow-[inset_0_-2px_0_#f0506e]" : "bg-panel2 text-muted"
+          className={`rounded-md py-2.5 text-[14px] font-semibold transition-colors ${
+            !isLong ? "bg-redDim text-red" : "text-muted hover:text-fg"
           }`}
         >
           Short
         </button>
       </div>
 
-      <div className="flex flex-col gap-3 p-3.5">
+      <div className="flex flex-col gap-3 p-3.5 pt-1.5">
         <div>
-          <div className="mb-1.5 flex justify-between text-xs text-muted">
-            <span>Collateral (KUSDT{oneClick.active ? " · 1-click balance" : ""})</span>
+          <div className="mb-1.5 flex justify-between text-[11px]">
+            <span className="eyebrow">Collateral{oneClick.active ? " · 1-click" : ""}</span>
             <button
-              className="text-accent"
+              className="tnum text-accent transition-opacity hover:opacity-80"
               onClick={() => {
                 const src = oneClick.active ? oneClick.balance : balance;
                 if (src !== undefined) setCollateral(
                   String(Math.floor(Number(formatEther(tokenToUsd(src))) * 100) / 100));
               }}
             >
-              Balance: {oneClick.active
+              {oneClick.active
                 ? fmtUsd(tokenToUsd(oneClick.balance))
                 : balance !== undefined ? fmtUsd(tokenToUsd(balance)) : "—"}
             </button>
           </div>
-          <input
-            type="number" min="0" placeholder="0.0" value={collateral}
-            onChange={(e) => setCollateral(e.target.value)}
-            className="w-full rounded-lg border border-line bg-bg px-3 py-2.5 text-[15px] outline-none focus:border-accent"
-          />
+          <div className="flex items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent/60">
+            <input
+              type="number" min="0" placeholder="0.00" value={collateral}
+              onChange={(e) => setCollateral(e.target.value)}
+              className="tnum w-full bg-transparent py-2.5 text-[15px] outline-none"
+            />
+            <span className="eyebrow">KUSDT</span>
+          </div>
         </div>
 
         <div>
-          <div className="mb-1.5 flex justify-between text-xs text-muted">
-            <span>Leverage</span><span className="text-fg">{levClamped}x</span>
+          <div className="mb-2 flex justify-between text-[11px]">
+            <span className="eyebrow">Leverage</span>
+            <span className="tnum font-medium text-accent">{levClamped}×</span>
           </div>
           <input
             type="range" min={1} max={maxLev} step={1} value={levClamped}
             onChange={(e) => setLev(Number(e.target.value))}
-            className="w-full accent-accent"
+            className="w-full"
           />
-          <div className="flex justify-between text-[11px] text-muted">
-            <span>1x</span><span>{maxLev}x</span>
+          <div className="eyebrow mt-1.5 flex justify-between">
+            <span>1×</span><span>{maxLev}×</span>
           </div>
         </div>
 
         <div>
-          <div className="mb-1.5 text-xs text-muted">Max slippage</div>
-          <select
-            value={slipIdx}
-            onChange={(e) => setSlipIdx(Number(e.target.value))}
-            className="w-full rounded-lg border border-line bg-bg px-3 py-2.5 outline-none"
-          >
+          <div className="eyebrow mb-1.5">Max slippage</div>
+          <div className="grid grid-cols-4 gap-1">
             {SLIPPAGE_OPTS.map((o, i) => (
-              <option key={o.label} value={i}>{o.label}</option>
+              <button
+                key={o.label}
+                onClick={() => setSlipIdx(i)}
+                className={`tnum rounded-md py-1.5 text-[11.5px] transition-colors ${
+                  slipIdx === i ? "bg-accentDim text-accent" : "bg-panel2 text-muted hover:text-fg"
+                }`}
+              >
+                {o.label}
+              </button>
             ))}
-          </select>
+          </div>
         </div>
 
-        <div className="rounded-lg bg-bg px-3 py-2.5 text-[12.5px]">
+        <div className="flex flex-col gap-1.5 rounded-md bg-bg px-3 py-3 text-[12px]">
           <Row k="Position size" v={sizeUsd ? `${fmtNum(sizeUsd)} USD` : "—"} />
-          <Row k="Entry (oracle)" v={price > 0n ? `$${fmtPrice(price)}` : "—"} />
-          <Row k="Est. liq. price" v={liqPrice ? `$${fmtNum(liqPrice, liqPrice >= 100 ? 1 : 4)}` : "—"} />
+          <Row k="Entry · oracle" v={price > 0n ? `$${fmtPrice(price)}` : "—"} />
+          <Row k="Est. liq. price" v={liqPrice ? `$${fmtNum(liqPrice, liqPrice >= 100 ? 1 : 4)}` : "—"} accent />
+          <div className="my-1 border-t border-lineSoft" />
           <Row
-            k={`Open fee${fees.feeBps !== null ? ` (${(fees.feeBps / 100).toFixed(2)}%)` : ""}`}
+            k={`Open fee${fees.feeBps !== null ? ` · ${(fees.feeBps / 100).toFixed(2)}%` : ""}`}
             v={sizeUsd && fees.feeBps !== null
               ? `${(sizeUsd * fees.feeBps / 10000).toFixed(2)} KUSDT` : "—"}
           />
           <Row
-            k="Borrow rate (current /h)"
+            k="Borrow /h"
             v={(isLong ? fees.longRatePerHour : fees.shortRatePerHour) !== null
               ? `${(isLong ? fees.longRatePerHour : fees.shortRatePerHour)!.toFixed(4)}%` : "—"}
           />
@@ -218,27 +227,27 @@ export default function TradePanel({ symbol }: { symbol: string }) {
         <button
           onClick={submit}
           disabled={busy}
-          className={`rounded-[10px] py-3 text-[15px] font-bold text-white disabled:opacity-50 ${
+          className={`rounded-md py-3 text-[14px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40 ${
             isLong ? "bg-green" : "bg-red"
           }`}
         >
           {busy ? "Submitting…" : `${oneClick.active ? "⚡ " : ""}${isLong ? "Long" : "Short"} ${symbol}`}
         </button>
 
-        <div className="text-[11.5px] leading-relaxed text-muted">
-          Orders are executed by a keeper at the next fresh oracle price
-          (front-run protection). Unexecuted orders can be cancelled after 60s.
+        <div className="text-[11px] leading-relaxed text-mutedDim">
+          Filled by a keeper at the next fresh oracle price for front-run
+          protection. Cancel an unfilled order after 60s.
         </div>
       </div>
     </div>
   );
 }
 
-function Row({ k, v }: { k: string; v: string }) {
+function Row({ k, v, accent }: { k: string; v: string; accent?: boolean }) {
   return (
-    <div className="flex justify-between py-[3px]">
+    <div className="flex justify-between">
       <span className="text-muted">{k}</span>
-      <span>{v}</span>
+      <span className={`tnum ${accent ? "text-accent" : "text-fg"}`}>{v}</span>
     </div>
   );
 }

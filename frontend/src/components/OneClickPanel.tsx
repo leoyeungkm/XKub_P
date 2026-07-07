@@ -117,12 +117,13 @@ export default function OneClickPanel() {
   };
 
   return (
-    <div className="overflow-hidden rounded-[10px] border border-line bg-panel">
-      <h3 className="flex items-center justify-between border-b border-line px-3.5 py-3 text-xs uppercase tracking-widest text-muted">
-        1-Click Trading
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-          active ? "bg-greenDim text-green" : "bg-panel2 text-muted"
+    <div className="overflow-hidden rounded-lg border border-line bg-panel">
+      <h3 className="eyebrow flex items-center justify-between border-b border-line px-3.5 py-2.5">
+        <span className="flex items-center gap-1.5">⚡ 1-Click Trading</span>
+        <span className={`flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+          active ? "bg-greenDim text-green" : "bg-panel2 text-mutedDim"
         }`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-green" : "bg-mutedDim"}`} />
           {active ? "ON" : "OFF"}
         </span>
       </h3>
@@ -138,54 +139,55 @@ export default function OneClickPanel() {
             </div>
             <button
               onClick={enable} disabled={busy}
-              className="rounded-lg bg-accent py-2.5 font-semibold text-white disabled:opacity-50"
+              className="rounded-md bg-accent py-2.5 text-[13px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               {busy ? "Enabling…" : "Enable 1-Click Trading"}
             </button>
           </>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-2 text-[12.5px]">
-              <div className="rounded-lg bg-bg px-2.5 py-2">
-                <div className="text-[11px] text-muted">Trading balance</div>
-                <div>{fmtUsd(tokenToUsd(balance))} KUSDT</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <div className="rounded-md bg-bg px-2.5 py-2">
+                <div className="eyebrow mb-0.5">Trading balance</div>
+                <div className="tnum text-[13px]">{fmtUsd(tokenToUsd(balance))}<span className="ml-1 text-[10px] text-mutedDim">KUSDT</span></div>
               </div>
-              <div className="rounded-lg bg-bg px-2.5 py-2">
-                <div className="text-[11px] text-muted">
-                  Agent gas · {agentAddr ? shortAddr(agentAddr) : "—"}
-                </div>
-                <div className={agentGas < parseEther("0.01") ? "text-red" : ""}>
-                  {Number(formatEther(agentGas)).toFixed(3)} KUB
+              <div className="rounded-md bg-bg px-2.5 py-2">
+                <div className="eyebrow mb-0.5">Agent gas · {agentAddr ? shortAddr(agentAddr) : "—"}</div>
+                <div className={`tnum text-[13px] ${agentGas < parseEther("0.01") ? "text-red" : ""}`}>
+                  {Number(formatEther(agentGas)).toFixed(3)}<span className="ml-1 text-[10px] text-mutedDim">KUB</span>
                 </div>
               </div>
             </div>
 
-            <input
-              type="number" min="0" placeholder="KUSDT amount" value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="w-full rounded-lg border border-line bg-bg px-3 py-2.5 outline-none focus:border-accent"
-            />
-            <div className="flex gap-2">
+            <div className="flex items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent/60">
+              <input
+                type="number" min="0" placeholder="0.00" value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="tnum w-full bg-transparent py-2.5 outline-none"
+              />
+              <span className="eyebrow">KUSDT</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
               <button
                 onClick={() => move("depositCollateral")} disabled={busy}
-                className="flex-1 rounded-lg border border-line bg-panel2 py-2.5 font-semibold hover:border-accent disabled:opacity-50"
+                className="rounded-md bg-accentDim py-2.5 text-[13px] font-semibold text-accent transition-opacity hover:opacity-90 disabled:opacity-40"
               >
                 Deposit
               </button>
               <button
                 onClick={() => move("withdrawCollateral")} disabled={busy}
-                className="flex-1 rounded-lg border border-line bg-panel2 py-2.5 font-semibold hover:border-accent disabled:opacity-50"
+                className="rounded-md border border-line py-2.5 text-[13px] font-semibold text-muted transition-colors hover:text-fg disabled:opacity-40"
               >
                 Withdraw
               </button>
             </div>
 
-            <div className="flex gap-2 text-xs">
-              <button onClick={topUp} disabled={busy} className="text-accent disabled:opacity-50">
-                Top up agent gas (+{formatEther(GAS_TOPUP)} KUB)
+            <div className="flex items-center gap-2 text-[11px]">
+              <button onClick={topUp} disabled={busy} className="text-accent transition-opacity hover:opacity-80 disabled:opacity-40">
+                Top up gas +{formatEther(GAS_TOPUP)} KUB
               </button>
               <div className="flex-1" />
-              <button onClick={disable} disabled={busy} className="text-muted hover:text-red disabled:opacity-50">
+              <button onClick={disable} disabled={busy} className="text-mutedDim transition-colors hover:text-red disabled:opacity-40">
                 Disable
               </button>
             </div>

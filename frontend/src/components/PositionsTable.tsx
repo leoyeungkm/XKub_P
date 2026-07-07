@@ -81,18 +81,21 @@ export default function PositionsTable() {
   };
 
   return (
-    <div className="overflow-hidden rounded-[10px] border border-line bg-panel">
-      <h3 className="border-b border-line px-3.5 py-3 text-xs uppercase tracking-widest text-muted">
+    <div className="overflow-hidden rounded-lg border border-line bg-panel">
+      <h3 className="eyebrow flex items-center gap-2 border-b border-line px-3.5 py-2.5">
         Positions
+        {rows.length > 0 && (
+          <span className="tnum rounded bg-panel2 px-1.5 py-0.5 text-[10px] text-fg">{rows.length}</span>
+        )}
       </h3>
       {rows.length === 0 ? (
-        <div className="px-3.5 py-4 text-[13px] text-muted">No open positions</div>
+        <div className="px-3.5 py-6 text-center text-[12px] text-mutedDim">No open positions</div>
       ) : (
-        <table className="w-full text-[13px]">
+        <table className="w-full text-[12.5px]">
           <thead>
-            <tr className="text-left text-[11.5px] font-medium text-muted">
+            <tr className="eyebrow text-left">
               {["Market", "Side", "Size", "Collateral", "Entry", "Mark", "PnL", ""].map((h) => (
-                <th key={h} className="border-b border-line px-3.5 py-2">{h}</th>
+                <th key={h} className="border-b border-line px-3.5 py-2 font-normal">{h}</th>
               ))}
             </tr>
           </thead>
@@ -100,22 +103,24 @@ export default function PositionsTable() {
             {rows.map((r) => {
               const entry = (r.pos.sizeUsd * E18) / r.pos.sizeTokens;
               return (
-                <tr key={r.symbol + r.isLong} className="border-b border-line last:border-0">
-                  <td className="px-3.5 py-2.5">{r.symbol}-PERP</td>
-                  <td className={`px-3.5 py-2.5 ${r.isLong ? "text-green" : "text-red"}`}>
-                    {r.isLong ? "Long" : "Short"}
+                <tr key={r.symbol + r.isLong} className="border-b border-lineSoft transition-colors last:border-0 hover:bg-panel2/40">
+                  <td className="px-3.5 py-2.5 font-medium">{r.symbol}-PERP</td>
+                  <td className="px-3.5 py-2.5">
+                    <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${r.isLong ? "bg-greenDim text-green" : "bg-redDim text-red"}`}>
+                      {r.isLong ? "Long" : "Short"}
+                    </span>
                   </td>
-                  <td className="px-3.5 py-2.5">{fmtUsd(r.pos.sizeUsd, 0)} USD</td>
-                  <td className="px-3.5 py-2.5">{fmtUsd(r.pos.collateralUsd)}</td>
-                  <td className="px-3.5 py-2.5">${fmtPrice(entry)}</td>
-                  <td className="px-3.5 py-2.5">{r.mark > 0n ? `$${fmtPrice(r.mark)}` : "—"}</td>
-                  <td className={`px-3.5 py-2.5 ${r.pnl >= 0n ? "text-green" : "text-red"}`}>
+                  <td className="tnum px-3.5 py-2.5">{fmtUsd(r.pos.sizeUsd, 0)}</td>
+                  <td className="tnum px-3.5 py-2.5">{fmtUsd(r.pos.collateralUsd)}</td>
+                  <td className="tnum px-3.5 py-2.5">${fmtPrice(entry)}</td>
+                  <td className="tnum px-3.5 py-2.5">{r.mark > 0n ? `$${fmtPrice(r.mark)}` : "—"}</td>
+                  <td className={`tnum px-3.5 py-2.5 font-medium ${r.pnl >= 0n ? "text-green" : "text-red"}`}>
                     {r.pnl >= 0n ? "+" : ""}{fmtUsd(r.pnl)}
                   </td>
-                  <td className="px-3.5 py-2.5">
+                  <td className="px-3.5 py-2.5 text-right">
                     <button
                       onClick={() => close(r.symbol, r.isLong, r.pos.sizeUsd, r.mark)}
-                      className="rounded-md border border-line bg-panel2 px-3 py-1 text-xs hover:border-red hover:text-red"
+                      className="rounded border border-line px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-red/50 hover:text-red"
                     >
                       Close
                     </button>

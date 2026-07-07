@@ -34,7 +34,7 @@ export default function PrivyConnect() {
     return (
       <button
         onClick={login}
-        className="rounded-lg bg-accent px-4 py-2 font-semibold text-white"
+        className="rounded-md bg-accent px-4 py-2 font-semibold text-bg transition-opacity hover:opacity-90"
       >
         Log in
       </button>
@@ -51,7 +51,7 @@ export default function PrivyConnect() {
             navigator.clipboard.writeText(shown);
             toast.success("Address copied — send KUSDT/KUB here");
           }}
-          className="rounded-lg border border-line bg-panel2 px-3 py-2 text-[12.5px]"
+          className="tnum rounded-md border border-line bg-panel2 px-3 py-2 text-[12px] transition-colors hover:border-accent/40"
           title={`${shown}\nClick to copy`}
         >
           {shortAddr(shown)} ⧉
@@ -59,7 +59,7 @@ export default function PrivyConnect() {
       )}
       <button
         onClick={logout}
-        className="rounded-lg border border-line bg-panel2 px-4 py-2 font-semibold"
+        className="rounded-md border border-line bg-panel2 px-4 py-2 font-medium transition-colors hover:border-red/40 hover:text-red"
         title="Log out"
       >
         {user?.email?.address ?? "Log out"}

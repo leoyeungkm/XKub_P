@@ -1,26 +1,112 @@
 @import "tailwindcss";
 
+/* ── XKub Perp — Hyperliquid-style terminal palette ──────────────────────────
+   Deep near-black with a green tint; a single mint/teal accent carries the
+   identity. Long/short muted, never neon. Numbers live in mono. */
 @theme {
-  --color-bg: #0b0e14;
-  --color-panel: #121722;
-  --color-panel2: #171e2c;
-  --color-line: #232c3f;
-  --color-fg: #e6ebf5;
-  --color-muted: #7d8aa5;
-  --color-green: #22c98a;
-  --color-greenDim: #123b2d;
-  --color-red: #f0506e;
-  --color-redDim: #3d1622;
-  --color-accent: #4f7cff;
+  --color-bg: #0a1211;
+  --color-panel: #0e1917;
+  --color-panel2: #14211d;
+  --color-line: #1c2b26;
+  --color-lineSoft: #172420;
+  --color-fg: #e9f1ee;
+  --color-muted: #6c807a;
+  --color-mutedDim: #47574f;
+
+  --color-accent: #4fd1c0;      /* signature mint/teal */
+  --color-accentDim: #10322c;
+  --color-accentSoft: #0c211d;
+
+  --color-green: #2fbd85;
+  --color-greenDim: #0e2a20;
+  --color-red: #f0637e;
+  --color-redDim: #2c1520;
+
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, "SF Mono", monospace;
+}
+
+html {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--color-bg);
+  background:
+    radial-gradient(120% 80% at 100% 0%, #0d1a17 0%, transparent 55%),
+    var(--color-bg);
   color: var(--color-fg);
-  font-size: 14px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+
+/* Every number aligns and reads like a ticker */
+.tnum {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Eyebrow / section labels */
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-muted);
 }
 
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
+}
+
+/* Mint range slider (leverage) */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--color-line);
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  cursor: pointer;
+  box-shadow: 0 0 0 4px var(--color-accentSoft);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-accent);
+  cursor: pointer;
+}
+
+/* Terminal scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #24352f;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

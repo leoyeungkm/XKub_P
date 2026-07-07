@@ -5,7 +5,7 @@ import { TV_SYMBOLS } from "@/config/contracts";
 export default function Chart({ symbol }: { symbol: string }) {
   const tv = TV_SYMBOLS[symbol] ?? `BINANCE:${symbol}USDT`;
   return (
-    <div className="h-[440px] overflow-hidden rounded-[10px] border border-line bg-panel">
+    <div className="h-[460px] overflow-hidden rounded-lg border border-line bg-panel">
       <iframe
         key={tv}
         className="h-full w-full border-0"

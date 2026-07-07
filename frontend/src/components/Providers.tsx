@@ -15,7 +15,8 @@ const PrivyStack = dynamic(() => import("./PrivyStack"), { ssr: false });
 const wagmiConfig = createConfig({
   chains: [chain],
   connectors: [injected()],
-  transports: { [chain.id]: http() },
+  transports: { [chain.id]: http(undefined, { batch: true }) },
+  batch: { multicall: true }, // aggregate contract reads via Multicall3
 });
 
 export default function Providers({ children }: { children: ReactNode }) {

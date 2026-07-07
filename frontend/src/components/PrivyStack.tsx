@@ -15,7 +15,8 @@ import { useState, type ReactNode } from "react";
 // (embedded wallets + any external wallet the user logs in with).
 const privyWagmiConfig = createConfig({
   chains: [chain],
-  transports: { [chain.id]: http() },
+  transports: { [chain.id]: http(undefined, { batch: true }) },
+  batch: { multicall: true }, // aggregate contract reads via Multicall3
 });
 
 export default function PrivyStack({ children }: { children: ReactNode }) {

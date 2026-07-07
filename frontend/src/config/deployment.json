@@ -5,13 +5,14 @@
   "explorer": "",
   "kusdtDecimals": 18,
   "addresses": {
-    "KUSDT": "0xE3cFCD16dBAa53d6A02FF9c2D0A1A10F6bf5f72d",
-    "XKubPriceOracle": "0x62A8dE156d68Cc20Aab5e6df22174DA2a4Cb6AdB",
-    "XKubPerpPool": "0xA741A4E3D42E4F7A919792E018d5D13a676a0229",
-    "XKubPerpMarket": "0x8897B219A2aa02902081D2cE0bDF6d8a82145cEa",
-    "XKubPerpRouter": "0xFcab73bAa99F8C3EAeCB53E40F19Df10d104C40f",
-    "XKubReferral": "0x63203fFe1AacD8fe3bdd874F2ec5CFe8b54AC51c"
+    "KUSDT": "0x9641e0363734546CDe13d35F7ccE9D754504EF7c",
+    "XKubPriceOracle": "0x90F06dc884F818e0ea26E93C97e3CD93bE03b2DB",
+    "XKubPerpPool": "0xB4D8F49B0203A3aeC19F7FfF823a9554A1658D7f",
+    "XKubPerpMarket": "0x9fd99787707fea54E66670Cb47Dfa2ED32ECcA0a",
+    "XKubPerpRouter": "0x6f5a9c90BdAc528EAf2D3BD49F510670430ad8Db",
+    "XKubReferral": "0xD4aa5f272cb72d8Eb9a56Dc14C65c8459380e317"
   },
+  "multicall3": "0x1D4AA19a45ABdE633C7291aC7754e2c052C75005",
   "markets": [
     {
       "symbol": "BTC",

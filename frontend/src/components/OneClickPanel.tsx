@@ -47,28 +47,17 @@ export default function OneClickPanel() {
           </>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-1.5">
-              <div className="rounded-md bg-bg px-2.5 py-2">
-                <div className="eyebrow mb-0.5">Trading balance</div>
-                <Link href="/portfolio" className="tnum text-[13px] hover:text-accent">
-                  {fmtUsd(tokenToUsd(oc.balance))}<span className="ml-1 text-[10px] text-mutedDim">KUSDT</span>
-                </Link>
-              </div>
-              <div className="rounded-md bg-bg px-2.5 py-2">
-                <div className="eyebrow mb-0.5">Agent gas · {oc.agentAddr ? shortAddr(oc.agentAddr) : "—"}</div>
-                <div className={`tnum text-[13px] ${oc.agentGas < parseEther("0.01") ? "text-red" : ""}`}>
-                  {Number(formatEther(oc.agentGas)).toFixed(3)}<span className="ml-1 text-[10px] text-mutedDim">KUB</span>
-                </div>
-              </div>
-            </div>
+            <p className="text-[12px] leading-relaxed text-muted">
+              一鍵交易已啟用，餘額與 Agent gas 見下方 Account。
+            </p>
             <div className="flex items-center gap-2 text-[11px]">
               <button onClick={oc.topUp} disabled={oc.busy} className="text-accent transition-opacity hover:opacity-80 disabled:opacity-40">
-                Top up gas +{formatEther(GAS_TOPUP)} KUB
+                充 gas +{formatEther(GAS_TOPUP)} KUB
               </button>
-              <Link href="/portfolio" className="text-muted hover:text-fg">Deposit →</Link>
+              <Link href="/portfolio" className="text-muted hover:text-fg">入金 →</Link>
               <div className="flex-1" />
               <button onClick={oc.disable} disabled={oc.busy} className="text-mutedDim transition-colors hover:text-red disabled:opacity-40">
-                Disable
+                停用
               </button>
             </div>
           </>

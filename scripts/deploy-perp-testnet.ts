@@ -94,6 +94,17 @@ async function main() {
   await referral.waitForDeployment();
   console.log(`XKubReferral:    ${await referral.getAddress()}`);
 
+  // Multicall3 for read batching. KUB mainnet already has the canonical one;
+  // deploy our own on local/testnet where it's missing.
+  const CANONICAL_MC3 = "0xcA11bde05977b3631167028862bE2a173976CA11";
+  let multicall3 = CANONICAL_MC3;
+  if (network.name !== "kubMainnet") {
+    const mc = await ethers.deployContract("Multicall3");
+    await mc.waitForDeployment();
+    multicall3 = await mc.getAddress();
+    console.log(`Multicall3:      ${multicall3}`);
+  }
+
   // ─── Wiring ────────────────────────────────────────────────────────────────
   await (await pool.setMarket(await market.getAddress())).wait();
   await (await market.setRouter(await router.getAddress())).wait();
@@ -210,6 +221,7 @@ async function main() {
     rpcUrl, explorer,
     kusdtDecimals,
     addresses: out.addresses,
+    multicall3,
     markets: markets.map(m => ({ symbol: m.symbol, maxLeverageX: m.maxLeverageX })),
     // VIP fee tiers (discount in bps of the position fee, volume in USD) — UI
     feeTiers: [

@@ -3,11 +3,15 @@ import deployment from "./deployment.json";
 
 export const CFG = deployment;
 
+const MC3 = (CFG as { multicall3?: string }).multicall3;
+
 export const chain = defineChain({
   id: CFG.chainId,
   name: CFG.chainName,
   nativeCurrency: { name: "KUB", symbol: "KUB", decimals: 18 },
   rpcUrls: { default: { http: [CFG.rpcUrl] } },
+  // Batches useReadContracts into a single eth_call for far fewer round-trips.
+  ...(MC3 ? { contracts: { multicall3: { address: MC3 as `0x${string}` } } } : {}),
   ...(CFG.explorer
     ? { blockExplorers: { default: { name: "KubScan", url: CFG.explorer } } }
     : {}),

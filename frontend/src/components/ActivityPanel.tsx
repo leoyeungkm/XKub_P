@@ -184,7 +184,7 @@ function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[
         <td className="tnum px-3 py-2.5">{fmtUsd(pp.collateralUsd)} USD</td>
         <td className="px-3 py-2.5" colSpan={4}>
           <span className="inline-flex items-center gap-1.5 rounded bg-panel2 px-2 py-0.5 text-[11px] text-accent">
-            <span className="h-2.5 w-2.5 shrink-0 animate-spin rounded-full border border-accent/30 border-t-accent [animation-duration:1.6s]" />
+            <span className="h-2.5 w-2.5 shrink-0 animate-spin rounded-full border border-accent/30 border-t-accent [animation-duration:2.5s]" />
             確認中 · Confirming…
           </span>
         </td>
@@ -253,7 +253,7 @@ function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[
                     disabled={isClosing}
                     className="inline-flex items-center gap-1.5 rounded border border-line px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-red/50 hover:text-red disabled:opacity-70"
                   >
-                    {isClosing && <span className="h-2.5 w-2.5 shrink-0 animate-spin rounded-full border border-muted/30 border-t-muted [animation-duration:1.6s]" />}
+                    {isClosing && <span className="h-2.5 w-2.5 shrink-0 animate-spin rounded-full border border-muted/30 border-t-muted [animation-duration:2.5s]" />}
                     {isClosing ? "平倉中…" : "市價平倉"}
                   </button>
                 </td>

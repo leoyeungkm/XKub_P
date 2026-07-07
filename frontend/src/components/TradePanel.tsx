@@ -196,7 +196,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
                 <span>Leverage</span><span className="tnum text-accent">{levClamped}×</span>
               </div>
               <div className="grid grid-cols-4 gap-1">
-                {[1, 2, 3, 5, 10, 20, 50, 100].filter((v) => v <= maxLev).map((v) => (
+                {[1, 2, 5, 10, 20, 25, 40, 50, 100].filter((v) => v <= maxLev).map((v) => (
                   <button
                     key={v}
                     onClick={() => setLev(v)}

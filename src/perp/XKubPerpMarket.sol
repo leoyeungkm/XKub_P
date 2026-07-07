@@ -112,7 +112,7 @@ contract XKubPerpMarket is ReentrancyGuard {
     uint256 public positionFeeBps      = 3;      // 0.03% of size, open & close
     uint256 public maintenanceMarginBps = 100;   // 1% of size
     uint256 public liquidationFeeUsd   = 5e18;   // keeper reward
-    uint256 public maxProfitBps        = 90000;  // 900% of collateral
+    uint256 public maxProfitBps        = 30000;  // 300% of collateral (limits straddle drain)
     uint256 public minCollateralUsd    = 10e18;  // 10 KUSDT
     uint256 public maxPriceAge         = 300;    // seconds
 

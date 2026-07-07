@@ -61,10 +61,10 @@ async function main() {
 
   // ─── Markets (BTC / ETH / KUB first wave) ──────────────────────────────────
   const markets: MarketDef[] = [
-    { symbol: "BTC", maxLeverageX: 10, maxOiUsd: usd(500_000), borrowRateFactorBps: 10, seedPrice: Number(process.env.SEED_BTC ?? "100000") },
-    { symbol: "ETH", maxLeverageX: 10, maxOiUsd: usd(300_000), borrowRateFactorBps: 10, seedPrice: Number(process.env.SEED_ETH ?? "4000") },
+    { symbol: "BTC", maxLeverageX: 40, maxOiUsd: usd(500_000), borrowRateFactorBps: 10, seedPrice: Number(process.env.SEED_BTC ?? "100000") },
+    { symbol: "ETH", maxLeverageX: 25, maxOiUsd: usd(300_000), borrowRateFactorBps: 10, seedPrice: Number(process.env.SEED_ETH ?? "4000") },
     // KUB is thin + volatile → lower leverage, smaller cap, pricier borrow
-    { symbol: "KUB", maxLeverageX: 5, maxOiUsd: usd(100_000), borrowRateFactorBps: 20, seedPrice: Number(process.env.SEED_KUB ?? "1.5") },
+    { symbol: "KUB", maxLeverageX: 10, maxOiUsd: usd(100_000), borrowRateFactorBps: 20, seedPrice: Number(process.env.SEED_KUB ?? "1.5") },
   ];
 
   // ─── Core contracts ────────────────────────────────────────────────────────

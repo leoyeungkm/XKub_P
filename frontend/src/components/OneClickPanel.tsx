@@ -29,7 +29,7 @@ export default function OneClickPanel() {
         </span>
       </h3>
 
-      <div className="flex flex-col gap-2.5 p-3.5">
+      <div className="flex flex-col gap-2 p-3">
         {!oc.active ? (
           <>
             <p className="text-[12px] leading-relaxed text-muted">

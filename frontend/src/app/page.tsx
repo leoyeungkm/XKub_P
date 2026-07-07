@@ -6,6 +6,7 @@ import Chart from "@/components/Chart";
 import TradePanel from "@/components/TradePanel";
 import OneClickPanel from "@/components/OneClickPanel";
 import ActivityPanel from "@/components/ActivityPanel";
+import ResizableColumn from "@/components/ResizableColumn";
 import EarnPanel from "@/components/EarnPanel";
 import { MARKETS } from "@/config/contracts";
 
@@ -15,12 +16,12 @@ export default function Home() {
   return (
     <>
       <MarketBar current={market} onChange={setMarket} />
-      <main className="grid grid-cols-1 gap-2.5 p-2.5 xl:grid-cols-[1fr_340px]">
-        <div className="flex min-w-0 flex-col gap-2.5">
-          <Chart symbol={market} />
-          <ActivityPanel />
-        </div>
-        <div className="flex flex-col gap-2.5">
+      <main className="grid grid-cols-1 gap-2 p-2 xl:grid-cols-[1fr_320px]">
+        <ResizableColumn
+          chart={(h) => <Chart symbol={market} height={h} />}
+          activity={<ActivityPanel />}
+        />
+        <div className="flex flex-col gap-2">
           <TradePanel symbol={market} />
           <OneClickPanel />
           <EarnPanel />

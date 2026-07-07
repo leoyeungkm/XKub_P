@@ -176,7 +176,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
         </button>
       </div>
 
-      <div className="flex flex-col gap-3 p-3.5 pt-1.5">
+      <div className="flex flex-col gap-2.5 p-3 pt-1.5">
         {/* cost */}
         <div>
           <div className="mb-1.5 flex justify-between text-[11px]">
@@ -306,9 +306,9 @@ export default function TradePanel({ symbol }: { symbol: string }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="border-t border-line px-3.5 py-3">
-      <div className="eyebrow mb-2">{title}</div>
-      <div className="flex flex-col gap-1.5 text-[12px]">{children}</div>
+    <div className="border-t border-line px-3 py-2.5">
+      <div className="eyebrow mb-1.5">{title}</div>
+      <div className="flex flex-col gap-1 text-[12px]">{children}</div>
     </div>
   );
 }

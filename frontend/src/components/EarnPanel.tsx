@@ -76,7 +76,7 @@ export default function EarnPanel() {
       <h3 className="eyebrow border-b border-line px-3.5 py-2.5">
         Earn · XPLP Pool
       </h3>
-      <div className="flex flex-col gap-2.5 p-3.5">
+      <div className="flex flex-col gap-2 p-3">
         <div className="grid grid-cols-2 gap-1.5">
           <Stat k="Pool value" v={poolValue !== undefined ? fmtUsd(poolValue, 0) : "—"} unit="USD" />
           <Stat k="XPLP price" v={sharePrice !== undefined ? `$${Number(formatEther(sharePrice)).toFixed(4)}` : "—"} />

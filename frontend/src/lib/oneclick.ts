@@ -10,7 +10,7 @@ import {
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { useAccount, useBalance, useReadContract } from "wagmi";
-import { ADDR, chain, routerAbi } from "@/config/contracts";
+import { ADDR, chain, routerAbi, RPC_HTTP } from "@/config/contracts";
 
 const storageKey = (owner: Address) => `xkub.agent.${chain.id}.${owner.toLowerCase()}`;
 const CHANGED = "xkub-agent-changed";
@@ -40,8 +40,8 @@ export function getAgentClients(owner: Address) {
   if (!account) return null;
   return {
     account,
-    wallet: createWalletClient({ account, chain, transport: http() }),
-    public: createPublicClient({ chain, transport: http() }),
+    wallet: createWalletClient({ account, chain, transport: http(RPC_HTTP) }),
+    public: createPublicClient({ chain, transport: http(RPC_HTTP) }),
   };
 }
 

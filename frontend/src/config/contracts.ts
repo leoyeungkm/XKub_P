@@ -5,9 +5,12 @@ export const CFG = deployment;
 
 const MC3 = (CFG as { multicall3?: string }).multicall3;
 
-// The KUB testnet RPC doesn't send CORS headers for browser preflight, so the
-// browser calls our same-origin proxy (frontend/src/app/api/rpc) which forwards
-// server-side. Server render / build has no `window`, so it hits the RPC direct.
+// Our own read client routes through a same-origin proxy (frontend/src/app/api/rpc)
+// to dodge the KUB RPC's flaky CORS preflight. Server render / build has no
+// `window`, so it hits the RPC direct.
+// NOTE: this is ONLY for our viem transport. The chain's rpcUrls below stays the
+// real public RPC — that's what external wallets receive via wallet_addEthereumChain,
+// and they can't reach a localhost proxy.
 export const RPC_HTTP =
   typeof window !== "undefined" ? `${window.location.origin}/api/rpc` : CFG.rpcUrl;
 
@@ -15,7 +18,7 @@ export const chain = defineChain({
   id: CFG.chainId,
   name: CFG.chainName,
   nativeCurrency: { name: "KUB", symbol: "KUB", decimals: 18 },
-  rpcUrls: { default: { http: [RPC_HTTP] } },
+  rpcUrls: { default: { http: [CFG.rpcUrl] } },
   // Batches useReadContracts into a single eth_call for far fewer round-trips.
   ...(MC3 ? { contracts: { multicall3: { address: MC3 as `0x${string}` } } } : {}),
   ...(CFG.explorer

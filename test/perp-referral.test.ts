@@ -78,7 +78,8 @@ describe("XKub Perp — referral", () => {
     // default 10% of fee; positionFeeBps = 3 (0.03%). open 10k size → fee 3 USD → rebate 0.3
     await market.connect(trader).increasePosition(BTC, true, usd(1_000), usd(10_000));
     const afterOpen = await referral.claimableUsd(referrer.address);
-    expect(afterOpen).to.equal(usd(10_000) * 3n / 10000n * 1000n / 10000n); // 0.3 USD
+    // referred trader pays a discounted fee (3bps → 2bps after 10% referral discount)
+    expect(afterOpen).to.equal(usd(10_000) * 2n / 10000n * 1000n / 10000n); // 0.2 USD
 
     await market.connect(trader).decreasePosition(BTC, true, usd(10_000));
     const afterClose = await referral.claimableUsd(referrer.address);
@@ -102,10 +103,10 @@ describe("XKub Perp — referral", () => {
     await market.connect(trader).increasePosition(BTC, true, usd(1_000), usd(10_000));
     const p = await market.getPosition(trader.address, BTC, true);
     // collateral = 1000 - openFee(3) = 997, referral does NOT change this
-    expect(p.collateralUsd).to.equal(usd(997));
+    expect(p.collateralUsd).to.equal(usd(998)); // 1000 - 2 open fee (referred discount)
 
     // pool got fee(3) then paid rebate(0.3) → net +2.7 vs a no-referral baseline
-    expect(await referral.claimableUsd(referrer.address)).to.equal(usd(3) * 1000n / 10000n);
+    expect(await referral.claimableUsd(referrer.address)).to.equal(usd(2) * 1000n / 10000n);
   });
 
   it("no referrer → no accrual, trade still works", async () => {
@@ -142,7 +143,7 @@ describe("XKub Perp — referral", () => {
     await referral.connect(trader).setReferrer(CODE);
     await referral.connect(admin).setCodeRebateBps(CODE, 5000); // 50% of fee
     await market.connect(trader).increasePosition(BTC, true, usd(1_000), usd(10_000));
-    expect(await referral.claimableUsd(referrer.address)).to.equal(usd(3) * 5000n / 10000n); // 1.5 USD
+    expect(await referral.claimableUsd(referrer.address)).to.equal(usd(2) * 5000n / 10000n); // 1.0 USD (fee 2 after referred discount)
   });
 
   it("rejects rebate bps above the hard cap", async () => {

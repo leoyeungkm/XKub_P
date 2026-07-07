@@ -8,6 +8,7 @@ import "./IXKubPerp.sol";
 interface IXKubReferral {
     function getRebate(address trader) external view returns (address referrer, uint256 rebateBps);
     function accrue(address referrer, address trader, uint256 usd) external;
+    function discountOf(address trader) external view returns (uint256 discountBps);
 }
 
 /*//////////////////////////////////////////////////////////////
@@ -124,9 +125,14 @@ contract XKubPerpMarket is ReentrancyGuard {
     mapping(bytes32 => uint64) public lastIncreaseAt; // positionKey → last open/increase time
 
     // VIP fee tiers: a trader's tier gives a discount on the position fee.
-    // Tier 0 = default (0% discount). Admin assigns tiers and per-tier discounts.
-    mapping(address => uint8)  public feeTier;
-    mapping(uint8 => uint256)  public tierDiscountBps;   // e.g. tier 3 → 3000 = 30% off the fee
+    // Tier 0 = default (0% discount). Tiers auto-upgrade with traded volume
+    // (volumeThreshold); admin can also bump a trader manually (feeTier) — the
+    // effective tier is the higher of the two.
+    mapping(address => uint8)  public feeTier;            // manual override tier
+    mapping(uint8 => uint256)  public tierDiscountBps;    // tier → % off the fee (bps)
+    mapping(uint8 => uint256)  public volumeThreshold;    // tier → cumulative volume (USD 1e18) to earn it
+    mapping(address => uint256) public userVolumeUsd;     // cumulative traded notional
+    uint8 public constant MAX_TIER = 10;
 
     // Protocol revenue: a share of every position fee is routed to the treasury
     // (drawn from the pool after the fee lands there, like referral rebates).
@@ -151,6 +157,7 @@ contract XKubPerpMarket is ReentrancyGuard {
     event ReferralSet(address indexed referral);
     event FeeTierSet(address indexed trader, uint8 tier);
     event TierDiscountSet(uint8 indexed tier, uint256 discountBps);
+    event VolumeThresholdSet(uint8 indexed tier, uint256 volumeUsd);
     event TreasurySet(address indexed treasury);
     event ProtocolFeeShareSet(uint256 bps);
     event ProtocolFeePaid(address indexed treasury, uint256 usd);
@@ -269,6 +276,7 @@ contract XKubPerpMarket is ReentrancyGuard {
             // check — they only ever improve position health.
             require(p.sizeUsd <= (p.collateralUsd + openFeeUsd) * cfg.maxLeverageX, "leverage too high");
             lastIncreaseAt[key] = uint64(block.timestamp); // start the rapid-close clock
+            userVolumeUsd[owner] += sizeDeltaUsd;          // for VIP volume tiers
         }
 
         require(p.collateralUsd >= minCollateralUsd, "collateral < min");
@@ -618,10 +626,34 @@ contract XKubPerpMarket is ReentrancyGuard {
         if (tokens > 0) kusdt.safeTransfer(address(pool), tokens);
     }
 
+    /// @notice Highest VIP tier a trader has earned by cumulative volume.
+    function earnedTier(address trader) public view returns (uint8) {
+        uint256 vol = userVolumeUsd[trader];
+        uint8 best = 0;
+        for (uint8 t = 1; t <= MAX_TIER; t++) {
+            uint256 thr = volumeThreshold[t];
+            if (thr != 0 && vol >= thr) best = t;
+        }
+        return best;
+    }
+
+    /// @notice Effective VIP tier: the higher of the volume-earned tier and any
+    ///         manual admin override.
+    function effectiveTier(address trader) public view returns (uint8) {
+        uint8 earned = earnedTier(trader);
+        uint8 manual = feeTier[trader];
+        return earned > manual ? earned : manual;
+    }
+
     /// @notice The position-fee rate a trader actually pays, after their VIP
-    ///         tier discount. Basis points of size.
+    ///         tier discount and any referral discount. Basis points of size.
     function effectiveFeeBps(address trader) public view returns (uint256) {
-        uint256 discount = tierDiscountBps[feeTier[trader]];
+        uint256 discount = tierDiscountBps[effectiveTier(trader)];
+        if (referral != address(0)) {
+            try IXKubReferral(referral).discountOf(trader) returns (uint256 refDisc) {
+                discount += refDisc;
+            } catch {}
+        }
         if (discount >= 10000) return 0;
         return (positionFeeBps * (10000 - discount)) / 10000;
     }
@@ -748,6 +780,13 @@ contract XKubPerpMarket is ReentrancyGuard {
         require(discountBps < 10000, "discount < 100%");
         tierDiscountBps[tier] = discountBps;
         emit TierDiscountSet(tier, discountBps);
+    }
+
+    /// @notice Cumulative traded volume (USD 1e18) required to auto-earn a tier.
+    function setVolumeThreshold(uint8 tier, uint256 volumeUsd) external onlyAdmin {
+        require(tier >= 1 && tier <= MAX_TIER, "bad tier");
+        volumeThreshold[tier] = volumeUsd;
+        emit VolumeThresholdSet(tier, volumeUsd);
     }
 
     function setTreasury(address _treasury) external onlyAdmin {

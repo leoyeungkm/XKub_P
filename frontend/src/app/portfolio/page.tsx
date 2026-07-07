@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useReadContracts } from "wagmi";
 import { formatEther } from "viem";
 import PositionsTable from "@/components/PositionsTable";
-import { fmtUsd, fmtPrice } from "@/lib/format";
-import { tokenToUsd } from "@/config/contracts";
+import { fmtNum, fmtUsd, fmtPrice } from "@/lib/format";
+import { ADDR, BASE_FEE_BPS, FEE_TIERS, marketAbi, tokenToUsd } from "@/config/contracts";
 import { useAccountSummary, useHistory, realizedPnl, type HistoryItem } from "@/lib/portfolio";
 import { useOneClickActions } from "@/lib/oneclickActions";
 
@@ -71,6 +71,8 @@ export default function Portfolio() {
           <Stat label="Total Unrealized PnL" value={`${signed(s.unrealizedUsd)} USD`} valueClass={cls(s.unrealizedUsd)} />
         </div>
       </div>
+
+      <VipCard />
 
       {/* Tabs */}
       <div className="overflow-hidden rounded-lg border border-line bg-panel">
@@ -152,6 +154,81 @@ export default function Portfolio() {
 
       {modal && <CollateralModal mode={modal} onClose={() => setModal(null)} available={s.tradingUsd} wallet={s.walletUsd} />}
     </main>
+  );
+}
+
+function VipCard() {
+  const { address } = useAccount();
+  const { data } = useReadContracts({
+    contracts: address ? [
+      { address: ADDR.market, abi: marketAbi, functionName: "effectiveTier", args: [address] },
+      { address: ADDR.market, abi: marketAbi, functionName: "userVolumeUsd", args: [address] },
+    ] as never[] : [],
+    query: { enabled: !!address, refetchInterval: 10000 },
+  });
+  const tier = (data?.[0]?.result as number | undefined) ?? 0;
+  const volume = Number(formatEther((data?.[1]?.result as bigint | undefined) ?? 0n));
+
+  const feeAt = (discountBps: number) => (BASE_FEE_BPS * (1 - discountBps / 10000) / 100).toFixed(4);
+  const next = FEE_TIERS.find((t) => t.tier === tier + 1);
+  const progress = next && next.volumeUsd > 0 ? Math.min(100, (volume / next.volumeUsd) * 100) : 100;
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-line bg-panel">
+      <h3 className="eyebrow flex items-center justify-between border-b border-line px-3.5 py-2.5">
+        <span>VIP 等級 · Fee Tier</span>
+        <span className="tnum rounded bg-accentDim px-2 py-0.5 text-[11px] font-medium text-accent">
+          {FEE_TIERS.find((t) => t.tier === tier)?.name ?? "Standard"}
+        </span>
+      </h3>
+      <div className="flex flex-col gap-3 p-3.5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="eyebrow mb-1">你的交易量 · Traded Volume</div>
+            <div className="tnum text-[20px] font-semibold">{fmtNum(volume, 0)} <span className="text-[12px] text-mutedDim">USD</span></div>
+          </div>
+          {next ? (
+            <div className="text-right text-[12px] text-muted">
+              距離 {next.name} 仲需 <span className="tnum text-fg">{fmtNum(Math.max(0, next.volumeUsd - volume), 0)}</span> USD
+            </div>
+          ) : (
+            <div className="text-[12px] text-accent">已達最高等級</div>
+          )}
+        </div>
+        {next && (
+          <div className="h-1.5 overflow-hidden rounded-full bg-panel2">
+            <div className="h-full bg-accent transition-all duration-500" style={{ width: `${progress}%` }} />
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="eyebrow text-left">
+                {["等級", "需累計交易量", "交易費率", "折扣"].map((h) => (
+                  <th key={h} className="whitespace-nowrap border-b border-line px-2.5 py-1.5 font-normal">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {FEE_TIERS.map((t) => (
+                <tr key={t.tier} className={`border-b border-lineSoft last:border-0 ${t.tier === tier ? "bg-accentDim/40" : ""}`}>
+                  <td className="px-2.5 py-2 font-medium">
+                    {t.name}{t.tier === tier && <span className="ml-1.5 text-[10px] text-accent">● 當前</span>}
+                  </td>
+                  <td className="tnum px-2.5 py-2 text-muted">{t.volumeUsd > 0 ? `$${fmtNum(t.volumeUsd, 0)}+` : "—"}</td>
+                  <td className="tnum px-2.5 py-2">{feeAt(t.discountBps)}%</td>
+                  <td className="tnum px-2.5 py-2 text-green">{t.discountBps > 0 ? `-${t.discountBps / 100}%` : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[11px] leading-relaxed text-mutedDim">
+          等級按累計交易量自動升級（成交即時計入）。交易越多，手續費越低。
+        </p>
+      </div>
+    </div>
   );
 }
 

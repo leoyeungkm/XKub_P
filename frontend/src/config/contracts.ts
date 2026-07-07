@@ -62,14 +62,24 @@ export const marketAbi = parseAbi([
   "function marketConfig(bytes32 marketId) view returns (bool listed, uint256 maxLeverageX, uint256 maxOiUsd, uint256 borrowRateFactorBps)",
   "function effectiveFeeBps(address trader) view returns (uint256)",
   "function feeTier(address trader) view returns (uint8)",
+  "function earnedTier(address trader) view returns (uint8)",
+  "function effectiveTier(address trader) view returns (uint8)",
+  "function userVolumeUsd(address trader) view returns (uint256)",
   "function maintenanceMarginBps() view returns (uint256)",
   "function rapidCloseFeeBps() view returns (uint256)",
   "function rapidCloseWindow() view returns (uint256)",
   "function minCollateralUsd() view returns (uint256)",
 ]);
 
-export const FEE_TIERS = ((CFG as { feeTiers?: { tier: number; name: string; discountBps: number }[] }).feeTiers)
-  ?? [{ tier: 0, name: "Standard", discountBps: 0 }];
+const CFGX = CFG as unknown as {
+  feeTiers?: { tier: number; name: string; discountBps: number; volumeUsd: number }[];
+  basePositionFeeBps?: number;
+  referredDiscountBps?: number;
+};
+export const FEE_TIERS = CFGX.feeTiers
+  ?? [{ tier: 0, name: "Standard", discountBps: 0, volumeUsd: 0 }];
+export const BASE_FEE_BPS = CFGX.basePositionFeeBps ?? 3;
+export const REFERRED_DISCOUNT_BPS = CFGX.referredDiscountBps ?? 1000;
 
 export const routerAbi = parseAbi([
   "function createIncreaseRequest(bytes32 marketId, bool isLong, uint256 collateralTokens, uint256 sizeDeltaUsd, uint256 acceptablePrice) payable returns (uint256)",
@@ -125,6 +135,11 @@ export const marketEventsAbi = parseAbi([
 export const routerEventsAbi = parseAbi([
   "event CollateralDeposited(address indexed owner, uint256 tokens)",
   "event CollateralWithdrawn(address indexed owner, uint256 tokens)",
+]);
+
+export const referralEventsAbi = parseAbi([
+  "event RebateAccrued(address indexed referrer, address indexed trader, uint256 usd)",
+  "event Referred(address indexed trader, bytes32 indexed code, address indexed referrer)",
 ]);
 
 export const referralAbi = parseAbi([

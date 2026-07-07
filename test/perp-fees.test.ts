@@ -59,6 +59,25 @@ describe("XKub Perp — fee tiers & protocol split", () => {
     expect(p.collateralUsd).to.equal(usd(999)); // 1000 - 1 fee
   });
 
+  it("auto-upgrades tier by cumulative volume", async () => {
+    const { market, trader, admin } = await loadFixture(deployFixture);
+    await market.connect(admin).setTierDiscount(1, 1000);   // VIP1 10% off
+    await market.connect(admin).setVolumeThreshold(1, usd(20_000)); // need 20k volume
+
+    expect(await market.earnedTier(trader.address)).to.equal(0);
+    // trade 25k volume total → crosses the 20k threshold
+    await market.connect(trader).increasePosition(BTC, true, usd(3_000), usd(25_000));
+    expect(await market.earnedTier(trader.address)).to.equal(1);
+    expect(await market.effectiveFeeBps(trader.address)).to.equal(2); // 3bps → 10% off → 2
+  });
+
+  it("effective tier is the higher of earned and manual", async () => {
+    const { market, trader, admin } = await loadFixture(deployFixture);
+    await market.connect(admin).setTierDiscount(3, 5000);
+    await market.connect(admin).setFeeTier(trader.address, 3); // manual VIP3
+    expect(await market.effectiveTier(trader.address)).to.equal(3);
+  });
+
   it("batch tier assignment works", async () => {
     const { market, trader, lp, admin } = await loadFixture(deployFixture);
     await market.connect(admin).setFeeTiers([trader.address, lp.address], 3);

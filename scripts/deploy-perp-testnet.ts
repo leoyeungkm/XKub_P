@@ -106,11 +106,17 @@ async function main() {
   await (await market.setTreasury(treasury)).wait();
   await (await market.setProtocolFeeShareBps(Number(process.env.PROTOCOL_FEE_SHARE_BPS ?? "3000"))).wait(); // 30% of fees
   // VIP tiers: tier 1 = 10% off, tier 2 = 25% off, tier 3 = 50% off (tier 0 = default)
-  const TIERS: Record<number, number> = { 1: 1000, 2: 2500, 3: 5000 };
-  for (const [tier, disc] of Object.entries(TIERS)) {
+  // Auto-upgrade by cumulative volume (testnet-reachable thresholds).
+  const TIERS: Record<number, { disc: number; vol: number }> = {
+    1: { disc: 1000, vol: 50_000 },
+    2: { disc: 2500, vol: 250_000 },
+    3: { disc: 5000, vol: 1_000_000 },
+  };
+  for (const [tier, { disc, vol }] of Object.entries(TIERS)) {
     await (await market.setTierDiscount(Number(tier), disc)).wait();
+    await (await market.setVolumeThreshold(Number(tier), usd(vol))).wait();
   }
-  console.log(`Treasury: ${treasury} · protocol fee share 30% · VIP tiers 1/2/3 = 10/25/50% off`);
+  console.log(`Treasury: ${treasury} · protocol fee share 30% · VIP tiers 1/2/3 = 10/25/50% off (vol 50k/250k/1M)`);
 
   const keeper = process.env.KEEPER_ADDRESS ?? deployer.address;
   await (await oracle.setKeeper(keeper, true)).wait();
@@ -202,13 +208,15 @@ async function main() {
     kusdtDecimals,
     addresses: out.addresses,
     markets: markets.map(m => ({ symbol: m.symbol, maxLeverageX: m.maxLeverageX })),
-    // VIP fee tiers (discount in bps of the position fee) — for UI display
+    // VIP fee tiers (discount in bps of the position fee, volume in USD) — UI
     feeTiers: [
-      { tier: 0, name: "Standard", discountBps: 0 },
-      { tier: 1, name: "VIP 1", discountBps: 1000 },
-      { tier: 2, name: "VIP 2", discountBps: 2500 },
-      { tier: 3, name: "VIP 3", discountBps: 5000 },
+      { tier: 0, name: "Standard", discountBps: 0, volumeUsd: 0 },
+      { tier: 1, name: "VIP 1", discountBps: 1000, volumeUsd: 50_000 },
+      { tier: 2, name: "VIP 2", discountBps: 2500, volumeUsd: 250_000 },
+      { tier: 3, name: "VIP 3", discountBps: 5000, volumeUsd: 1_000_000 },
     ],
+    basePositionFeeBps: 3,
+    referredDiscountBps: 1000,
   };
   // Next.js app: static JSON import
   const feCfgDir = path.join(__dirname, "..", "frontend", "src", "config");

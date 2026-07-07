@@ -44,6 +44,10 @@ contract XKubReferral is ReentrancyGuard {
     uint256 public defaultRebateBps = 1000; // 10%
     uint256 public constant MAX_REBATE_BPS = 5000; // 50% of the fee, hard cap
 
+    // Fee discount a referred trader gets (bps of the position fee). The friend
+    // saves; the market applies this in effectiveFeeBps.
+    uint256 public referredDiscountBps = 1000; // 10% off for referred traders
+
     mapping(bytes32 => address) public codeOwner;      // code → referrer
     mapping(address => bytes32) public ownerCode;      // referrer → their code
     mapping(bytes32 => uint256) public codeRebateBps;  // per-code override (0 = use default)
@@ -58,6 +62,7 @@ contract XKubReferral is ReentrancyGuard {
     event RebateAccrued(address indexed referrer, address indexed trader, uint256 usd);
     event RebateClaimed(address indexed referrer, uint256 kusdt);
     event DefaultRebateUpdated(uint256 bps);
+    event ReferredDiscountUpdated(uint256 bps);
     event CodeRebateUpdated(bytes32 indexed code, uint256 bps);
     event MarketSet(address indexed market);
     event AdminChanged(address indexed oldAdmin, address indexed newAdmin);
@@ -116,6 +121,15 @@ contract XKubReferral is ReentrancyGuard {
         rebateBps = bps == 0 ? defaultRebateBps : bps;
     }
 
+    /// @notice Fee discount (bps) a referred trader gets — 0 if not referred.
+    function discountOf(address trader) external view returns (uint256) {
+        bytes32 code = referredBy[trader];
+        if (code == bytes32(0)) return 0;
+        address ref = codeOwner[code];
+        if (ref == address(0) || ref == trader) return 0;
+        return referredDiscountBps;
+    }
+
     /// @notice Book a rebate the pool has just delivered to this contract.
     ///         Only the market may call. `usd` must equal the KUSDT amount
     ///         (in USD 1e18) transferred here for this rebate.
@@ -154,6 +168,12 @@ contract XKubReferral is ReentrancyGuard {
         require(bps <= MAX_REBATE_BPS, "> max");
         defaultRebateBps = bps;
         emit DefaultRebateUpdated(bps);
+    }
+
+    function setReferredDiscountBps(uint256 bps) external onlyAdmin {
+        require(bps <= MAX_REBATE_BPS, "> max");
+        referredDiscountBps = bps;
+        emit ReferredDiscountUpdated(bps);
     }
 
     /// @notice Per-code rebate tier (e.g. higher rate for a partner). 0 resets to default.

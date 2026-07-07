@@ -7,6 +7,7 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import toast from "react-hot-toast";
+import ThemeToggle from "./ThemeToggle";
 import { ADDR, CFG, chain, erc20Abi, tokenToUsd, usdToToken } from "@/config/contracts";
 import { shortAddr, errMsg, fmtUsd } from "@/lib/format";
 import { PRIVY_ENABLED } from "@/lib/privy";
@@ -70,6 +71,7 @@ export default function Header() {
         {CFG.chainName}
       </div>
       <div className="flex-1" />
+      <ThemeToggle />
       <button
         onClick={faucet}
         className="rounded-md border border-line px-3 py-2 text-[12px] text-muted transition-colors hover:border-accent/40 hover:text-fg"

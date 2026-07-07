@@ -33,9 +33,9 @@ export default function Providers({ children }: { children: ReactNode }) {
           position="bottom-right"
           toastOptions={{
             style: {
-              background: "#171e2c",
-              color: "#e6ebf5",
-              border: "1px solid #232c3f",
+              background: "var(--panel2)",
+              color: "var(--fg)",
+              border: "1px solid var(--line)",
               fontSize: "13px",
             },
           }}

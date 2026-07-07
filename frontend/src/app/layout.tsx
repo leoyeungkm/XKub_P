@@ -32,6 +32,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${plexMono.variable}`}>
       <body className="min-h-screen antialiased">
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if((localStorage.getItem('xkub.theme')||'dark')==='light')document.documentElement.classList.add('light')}catch(e){}`,
+          }}
+        />
         <Providers>
           <Header />
           {children}

@@ -15,8 +15,8 @@ const COMBOS = MARKETS.flatMap((m) => [
 ]);
 
 export type PositionRow = {
-  symbol: string; isLong: boolean; sizeUsd: bigint; collateralUsd: bigint;
-  entry: bigint; mark: bigint; pnl: bigint;
+  symbol: string; isLong: boolean; sizeUsd: bigint; sizeTokens: bigint;
+  collateralUsd: bigint; entry: bigint; mark: bigint; pnl: bigint;
 };
 
 export function usePositions() {
@@ -36,7 +36,8 @@ export function usePositions() {
     const peek = data?.[i * 3 + 2]?.result as readonly [bigint, bigint] | undefined;
     if (!pos || pos.sizeUsd === 0n) return null;
     return {
-      symbol: c.symbol, isLong: c.isLong, sizeUsd: pos.sizeUsd, collateralUsd: pos.collateralUsd,
+      symbol: c.symbol, isLong: c.isLong, sizeUsd: pos.sizeUsd, sizeTokens: pos.sizeTokens,
+      collateralUsd: pos.collateralUsd,
       entry: (pos.sizeUsd * E18) / pos.sizeTokens, mark: peek?.[0] ?? 0n, pnl,
     };
   }).filter(Boolean) as PositionRow[];

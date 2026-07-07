@@ -1,58 +1,96 @@
 @import "tailwindcss";
 
-/* ── XKub Perp — Hyperliquid-style terminal palette ──────────────────────────
-   Deep near-black with a green tint; a single mint/teal accent carries the
-   identity. Long/short muted, never neon. Numbers live in mono. */
-@theme {
-  --color-bg: #0a1211;
-  --color-panel: #0e1917;
-  --color-panel2: #14211d;
-  --color-line: #1c2b26;
-  --color-lineSoft: #172420;
-  --color-fg: #e9f1ee;
-  --color-muted: #6c807a;
-  --color-mutedDim: #47574f;
-
-  --color-accent: #4fd1c0;      /* signature mint/teal */
-  --color-accentDim: #10322c;
-  --color-accentSoft: #0c211d;
-
-  --color-green: #2fbd85;
-  --color-greenDim: #0e2a20;
-  --color-red: #f0637e;
-  --color-redDim: #2c1520;
+/* Utilities reference runtime CSS variables (--bg etc.) so the palette can be
+   swapped at runtime between dark and light themes. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel2: var(--panel2);
+  --color-line: var(--line);
+  --color-lineSoft: var(--lineSoft);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-mutedDim: var(--mutedDim);
+  --color-accent: var(--accent);
+  --color-accentDim: var(--accentDim);
+  --color-accentSoft: var(--accentSoft);
+  --color-green: var(--green);
+  --color-greenDim: var(--greenDim);
+  --color-red: var(--red);
+  --color-redDim: var(--redDim);
 
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-mono), ui-monospace, "SF Mono", monospace;
 }
 
+/* ── Dark (default) — high contrast ─────────────────────────────────────── */
+:root {
+  --bg: #050f0d;
+  --panel: #0c1a16;
+  --panel2: #16271f;
+  --line: #293c34;
+  --lineSoft: #1b2a24;
+  --fg: #f3f8f6;
+  --muted: #93a7a0;
+  --mutedDim: #61736c;
+  --accent: #45e6cd;
+  --accentDim: #113c34;
+  --accentSoft: #0c261f;
+  --green: #29d68f;
+  --greenDim: #10331f;
+  --red: #ff6683;
+  --redDim: #34161f;
+  --page-glow: #0f231d;
+}
+
+/* ── Light ───────────────────────────────────────────────────────────────── */
+.light {
+  --bg: #eef2f0;
+  --panel: #ffffff;
+  --panel2: #f0f4f2;
+  --line: #ccd8d2;
+  --lineSoft: #e2e9e5;
+  --fg: #0a1714;
+  --muted: #566761;
+  --mutedDim: #8b9c95;
+  --accent: #0d9b88;
+  --accentDim: #cdefe8;
+  --accentSoft: #e4f5f1;
+  --green: #08966a;
+  --greenDim: #d3f0e2;
+  --red: #d8354f;
+  --redDim: #fbdfe4;
+  --page-glow: #dcefe9;
+}
+
 html {
   color-scheme: dark;
+}
+html.light {
+  color-scheme: light;
 }
 
 body {
   background:
-    radial-gradient(120% 80% at 100% 0%, #0d1a17 0%, transparent 55%),
-    var(--color-bg);
-  color: var(--color-fg);
+    radial-gradient(120% 80% at 100% 0%, var(--page-glow) 0%, transparent 55%),
+    var(--bg);
+  color: var(--fg);
   font-family: var(--font-sans);
   font-size: 13px;
   letter-spacing: -0.01em;
 }
 
-/* Every number aligns and reads like a ticker */
 .tnum {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
 
-/* Eyebrow / section labels */
 .eyebrow {
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--color-muted);
+  color: var(--muted);
 }
 
 input[type="number"]::-webkit-outer-spin-button,
@@ -60,13 +98,12 @@ input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
 }
 
-/* Mint range slider (leverage) */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   height: 3px;
   border-radius: 3px;
-  background: var(--color-line);
+  background: var(--line);
   outline: none;
 }
 input[type="range"]::-webkit-slider-thumb {
@@ -75,20 +112,19 @@ input[type="range"]::-webkit-slider-thumb {
   width: 15px;
   height: 15px;
   border-radius: 50%;
-  background: var(--color-accent);
+  background: var(--accent);
   cursor: pointer;
-  box-shadow: 0 0 0 4px var(--color-accentSoft);
+  box-shadow: 0 0 0 4px var(--accentSoft);
 }
 input[type="range"]::-moz-range-thumb {
   width: 15px;
   height: 15px;
   border: none;
   border-radius: 50%;
-  background: var(--color-accent);
+  background: var(--accent);
   cursor: pointer;
 }
 
-/* Terminal scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -97,11 +133,11 @@ input[type="range"]::-moz-range-thumb {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-line);
+  background: var(--line);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #24352f;
+  background: var(--muted);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -310,7 +310,7 @@ function startRelayer(router: any, oracle: any, maxDeviationBps: bigint, keeperS
           // tx can pass gas-estimation yet still revert on-chain (e.g. price bound),
           // and an optimistic "ok" would leave the UI stuck on "closing…".
           const rcpt = await tx.wait(1, 40_000);
-          if (!rcpt || rcpt.status !== 1) { submitted.delete(key); throw new Error("execution reverted on-chain"); }
+          if (!rcpt || rcpt.status !== 1) { submitted.delete(key); throw new Error(`execution reverted on-chain (${tx.hash})`); }
           console.log(`[${now()}] relayed ${o.isIncrease ? "open" : "close"} ${sym} for ${o.owner} #${o.nonce} @ $${Number(ethers.formatEther(value)).toFixed(sym === "KUB" ? 4 : 0)} (${tx.hash})`);
           res.writeHead(200, { "content-type": "application/json" });
           res.end(JSON.stringify({ ok: true, txHash: tx.hash }));

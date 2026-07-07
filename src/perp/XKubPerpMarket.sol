@@ -5,6 +5,11 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./IXKubPerp.sol";
 
+interface IXKubReferral {
+    function getRebate(address trader) external view returns (address referrer, uint256 rebateBps);
+    function accrue(address referrer, address trader, uint256 usd) external;
+}
+
 /*//////////////////////////////////////////////////////////////
             XKub Perp: Market / Position Engine
 //////////////////////////////////////////////////////////////
@@ -81,6 +86,11 @@ contract XKubPerpMarket is ReentrancyGuard {
     address public router;
     bool    public directTradingEnabled;
 
+    // Optional referral module. When set, a fraction of each position fee is
+    // rebated to the trader's referrer, drawn from the pool AFTER the fee has
+    // been sent there — so core settlement accounting is unchanged.
+    address public referral;
+
     bytes32[] public marketIds;
     mapping(bytes32 => MarketConfig) public marketConfig;
     mapping(bytes32 => MarketState)  internal marketState;
@@ -120,6 +130,7 @@ contract XKubPerpMarket is ReentrancyGuard {
     event AdminChanged(address indexed oldAdmin, address indexed newAdmin);
     event RouterSet(address indexed router);
     event DirectTradingSet(bool enabled);
+    event ReferralSet(address indexed referral);
 
     modifier onlyAdmin() {
         require(msg.sender == admin, "!admin");
@@ -236,6 +247,7 @@ contract XKubPerpMarket is ReentrancyGuard {
         }
 
         _sendToPool(feeUsd);
+        if (sizeDeltaUsd > 0) _payReferralRebate(owner, (sizeDeltaUsd * positionFeeBps) / 10000);
         emit PositionIncreased(owner, marketId, isLong, collateralTokens * scaler, sizeDeltaUsd, price, feeUsd);
     }
 
@@ -318,6 +330,7 @@ contract XKubPerpMarket is ReentrancyGuard {
         _sendToPool(toPoolUsd + borrowFeeUsd);
         if (fromCollateralUsd > 0) kusdt.safeTransfer(owner, fromCollateralUsd / scaler);
         if (fromPoolUsd > 0) pool.payOutUsd(owner, fromPoolUsd);
+        _payReferralRebate(owner, closeFeeUsd);
 
         emit PositionDecreased(owner, marketId, isLong, sizeDeltaUsd, price, pnlUsd, payoutUsd, closeFeeUsd + borrowFeeUsd);
     }
@@ -556,6 +569,21 @@ contract XKubPerpMarket is ReentrancyGuard {
         if (tokens > 0) kusdt.safeTransfer(address(pool), tokens);
     }
 
+    /// @dev Rebate a fraction of the position fee to the trader's referrer.
+    ///      The fee is already in the pool at this point; the rebate is drawn
+    ///      back out via the pool's payout hook, so pool value simply nets the
+    ///      fee minus the rebate. Never reverts the trade on referral issues.
+    function _payReferralRebate(address trader, uint256 feeBaseUsd) internal {
+        address ref = referral;
+        if (ref == address(0) || feeBaseUsd == 0) return;
+        (address referrer, uint256 rebateBps) = IXKubReferral(ref).getRebate(trader);
+        if (referrer == address(0) || rebateBps == 0) return;
+        uint256 rebateUsd = (feeBaseUsd * rebateBps) / 10000;
+        if (rebateUsd / scaler == 0) return; // sub-unit dust, skip
+        pool.payOutUsd(ref, rebateUsd);          // pool forwards KUSDT to the referral contract
+        IXKubReferral(ref).accrue(referrer, trader, rebateUsd);
+    }
+
     // ─── Admin ─────────────────────────────────────────────────────────────────
 
     function listMarket(
@@ -617,6 +645,12 @@ contract XKubPerpMarket is ReentrancyGuard {
         require(_router != address(0), "!router");
         router = _router;
         emit RouterSet(_router);
+    }
+
+    /// @notice Wire (or unset) the referral module. address(0) disables rebates.
+    function setReferral(address _referral) external onlyAdmin {
+        referral = _referral;
+        emit ReferralSet(_referral);
     }
 
     /// @notice Testnet convenience only — leave OFF in production so all

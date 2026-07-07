@@ -90,11 +90,28 @@ describe("XKub Perp", () => {
   // ─── Pool ──────────────────────────────────────────────────────────────────
 
   describe("XKubPerpPool", () => {
-    it("first deposit mints 1:1, share price starts at 1", async () => {
+    it("first deposit mints 1:1 (minus locked dead shares), share price starts at 1", async () => {
       const { pool, lp } = await loadFixture(deployFixture);
+      const MIN_LIQ = 10n ** 6n; // MINIMUM_LIQUIDITY burned to 0xdEaD
       await pool.connect(lp).deposit(usd(100_000));
-      expect(await pool.balanceOf(lp.address)).to.equal(usd(100_000));
+      expect(await pool.balanceOf(lp.address)).to.equal(usd(100_000) - MIN_LIQ);
       expect(await pool.sharePriceUsd()).to.equal(E18);
+    });
+
+    it("blocks the first-deposit inflation attack", async () => {
+      const { pool, kusdt, lp, trader } = await loadFixture(deployFixture);
+      // attacker seeds 1 wei then donates a large amount directly to the pool
+      await kusdt.mint(trader.address, usd(50_000));
+      await kusdt.connect(trader).approve(await pool.getAddress(), ethers.MaxUint256);
+      await expect(pool.connect(trader).deposit(1n)).to.be.revertedWith("first deposit too small");
+
+      // an honest first deposit locks dead shares; a later victim is priced fairly
+      await pool.connect(lp).deposit(usd(10_000));
+      await kusdt.connect(trader).transfer(await pool.getAddress(), usd(40_000)); // donation
+      // victim still receives shares proportional to the (now inflated) value, no zero-mint grief
+      const before = await pool.balanceOf(trader.address);
+      await pool.connect(trader).deposit(usd(10_000));
+      expect(await pool.balanceOf(trader.address)).to.be.gt(before);
     });
 
     it("fees accrue to LPs (share price rises after trader pays fees)", async () => {

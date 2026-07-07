@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./IXKubPerp.sol";
 
 /*//////////////////////////////////////////////////////////////
@@ -34,12 +35,17 @@ import "./IXKubPerp.sol";
   converted at the edges. 1 KUSDT is assumed = 1 USD.
 */
 
-contract XKubPerpPool is ERC20 {
+contract XKubPerpPool is ERC20, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     IERC20  public immutable kusdt;
     uint256 public immutable quoteDecimals;
     uint256 private immutable scaler; // 10^(18 - quoteDecimals)
+
+    // Burned to address(0) on the first deposit so total supply can never
+    // return to a tiny number — neutralises the ERC4626 inflation/donation
+    // attack (a first depositor of 1 wei + a large direct transfer).
+    uint256 internal constant MINIMUM_LIQUIDITY = 1e6;
 
     address public admin;
     IXKubPerpMarket public market; // set once after market deployment
@@ -83,14 +89,18 @@ contract XKubPerpPool is ERC20 {
     // ─── LP Entry / Exit ───────────────────────────────────────────────────────
 
     /// @notice Deposit KUSDT, mint XPLP at current pool value
-    function deposit(uint256 kusdtAmount) external returns (uint256 shares) {
+    function deposit(uint256 kusdtAmount) external nonReentrant returns (uint256 shares) {
         require(kusdtAmount > 0, "!amount");
         uint256 amountUsd = kusdtAmount * scaler;
         uint256 valueBefore = poolValueUsd();
         uint256 supply = totalSupply();
 
         if (supply == 0 || valueBefore == 0) {
-            shares = amountUsd;
+            // First deposit: permanently lock MINIMUM_LIQUIDITY shares so the
+            // supply floor blocks share-price inflation by later donations.
+            require(amountUsd > MINIMUM_LIQUIDITY, "first deposit too small");
+            shares = amountUsd - MINIMUM_LIQUIDITY;
+            _mint(address(0xdEaD), MINIMUM_LIQUIDITY);
         } else {
             shares = (amountUsd * supply) / valueBefore;
         }
@@ -103,7 +113,7 @@ contract XKubPerpPool is ERC20 {
     }
 
     /// @notice Burn XPLP, withdraw proportional KUSDT (subject to reserve guard)
-    function withdraw(uint256 shares) external returns (uint256 kusdtAmount) {
+    function withdraw(uint256 shares) external nonReentrant returns (uint256 kusdtAmount) {
         require(shares > 0, "!shares");
         require(block.timestamp >= lastDepositAt[msg.sender] + withdrawCooldown, "cooldown");
         uint256 supply = totalSupply();
@@ -177,11 +187,19 @@ contract XKubPerpPool is ERC20 {
     }
 
     /// @dev Propagate the deposit timer on transfers so the cooldown cannot
-    ///      be dodged by moving XPLP to a fresh wallet.
+    ///      be dodged by moving XPLP to a fresh wallet. The inherited timer is
+    ///      balance-weighted, so a dust transfer barely moves the receiver's
+    ///      clock — this blocks the griefing vector where anyone resets a
+    ///      victim's cooldown by sending 1 wei of XPLP.
     function _update(address from, address to, uint256 value) internal override {
-        if (from != address(0) && to != address(0)) {
+        if (from != address(0) && to != address(0) && value > 0) {
             uint256 fromTime = lastDepositAt[from];
-            if (fromTime > lastDepositAt[to]) lastDepositAt[to] = fromTime;
+            uint256 toTime = lastDepositAt[to];
+            if (fromTime > toTime) {
+                uint256 toBal = balanceOf(to);
+                // weighted average of the two clocks by balance vs incoming value
+                lastDepositAt[to] = (toTime * toBal + fromTime * value) / (toBal + value);
+            }
         }
         super._update(from, to, value);
     }

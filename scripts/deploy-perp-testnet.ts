@@ -88,9 +88,17 @@ async function main() {
   await router.waitForDeployment();
   console.log(`XKubPerpRouter:  ${await router.getAddress()}`);
 
+  const referral = await ethers.deployContract("XKubReferral", [
+    kusdtAddress, kusdtDecimals, deployer.address,
+  ]);
+  await referral.waitForDeployment();
+  console.log(`XKubReferral:    ${await referral.getAddress()}`);
+
   // ─── Wiring ────────────────────────────────────────────────────────────────
   await (await pool.setMarket(await market.getAddress())).wait();
   await (await market.setRouter(await router.getAddress())).wait();
+  await (await market.setReferral(await referral.getAddress())).wait();
+  await (await referral.setMarket(await market.getAddress())).wait();
   // directTradingEnabled stays FALSE — all orders go through the router
 
   const keeper = process.env.KEEPER_ADDRESS ?? deployer.address;
@@ -148,6 +156,7 @@ async function main() {
       XKubPerpPool: await pool.getAddress(),
       XKubPerpMarket: await market.getAddress(),
       XKubPerpRouter: await router.getAddress(),
+      XKubReferral: await referral.getAddress(),
     },
     keeper,
     markets: markets.map(m => ({

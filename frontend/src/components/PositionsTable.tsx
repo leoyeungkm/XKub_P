@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { parseEther } from "viem";
 import { useAccount, usePublicClient, useReadContracts, useReadContract } from "wagmi";
 import toast from "react-hot-toast";
 import { ADDR, E18, MARKETS, b32, marketAbi, oracleAbi, routerAbi } from "@/config/contracts";
@@ -10,7 +9,6 @@ import { errMsg, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
 import { gaslessAvailable, submitGaslessOrder } from "@/lib/gasless";
 import { refreshPositions } from "@/lib/portfolio";
-import { useLivePrices } from "@/lib/cexPrice";
 
 const COMBOS = MARKETS.flatMap((m) => [
   { symbol: m.symbol, isLong: true },
@@ -22,7 +20,6 @@ export default function PositionsTable() {
   const client = usePublicClient();
   const { writeContract } = useKubWrite();
   const oneClick = useOneClick();
-  const livePrices = useLivePrices();
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
   const { data: minExecFee } = useReadContract({
@@ -60,12 +57,9 @@ export default function PositionsTable() {
     if (busyKey) return; // ignore repeat clicks while a close is in flight
     setBusyKey(key);
     try {
-      // 1% slippage bound off the live price (oracle mark can be stale)
-      const live = livePrices[symbol];
-      const ref = live && live > 0 ? parseEther(live.toFixed(6)) : mark;
-      const acceptable = ref > 0n
-        ? isLong ? ref - ref / 100n : ref + ref / 100n
-        : 0n;
+      // Market close: no price bound (keeper fills at a fresh signed price), so a
+      // tight slippage doesn't cause spurious "price bound" reverts.
+      const acceptable = 0n;
       const fee = minExecFee ?? 0n;
 
       // Gasless: agent signs, relayer submits & pays gas (mirrors the open flow)

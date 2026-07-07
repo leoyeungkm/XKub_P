@@ -36,9 +36,15 @@ export default function ActivityPanel() {
     const key = `${p.symbol}-${p.isLong}`;
     if (closing[key]) return; // already closing — ignore repeat clicks
     setClosing((s) => ({ ...s, [key]: true }));
+    // Safety net: never let the button stick on "closing…" — clear after 12s
+    // even if a refetch is slow (the catch clears sooner on failure).
+    setTimeout(() => setClosing((s) => { const n = { ...s }; delete n[key]; return n; }), 12000);
     try {
       const fee = minExecFee ?? 0n;
-      const acceptable = p.mark > 0n ? (p.isLong ? p.mark - p.mark / 100n : p.mark + p.mark / 100n) : 0n;
+      // Market close: no price bound. The keeper fills at a fresh signed price
+      // (validated ≤20% of last on-chain), so a tight slippage here only causes
+      // spurious "price bound" reverts when the price ticks between click & fill.
+      const acceptable = 0n;
       // Gasless close: agent signs, relayer submits & pays gas
       if (oneClick.active && gaslessAvailable()) {
         try {
@@ -59,6 +65,7 @@ export default function ActivityPanel() {
         });
         await client.waitForTransactionReceipt({ hash });
         toast.success("Close queued (1-click)");
+        refreshPositions();
         return;
       }
       const hash = await writeContract({
@@ -67,6 +74,7 @@ export default function ActivityPanel() {
       });
       await client.waitForTransactionReceipt({ hash });
       toast.success("Close queued");
+      refreshPositions();
       // leave `closing` set on success — the row disappears on the next refetch
     } catch (e) {
       toast.error(errMsg(e));

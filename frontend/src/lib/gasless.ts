@@ -69,6 +69,7 @@ export async function submitGaslessOrder(params: {
 
   const res = await fetch(RELAYER_URL, {
     method: "POST",
+    signal: AbortSignal.timeout(45000), // relayer waits ≤40s for the receipt
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       order: {

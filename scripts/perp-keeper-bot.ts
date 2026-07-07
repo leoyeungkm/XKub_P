@@ -27,7 +27,7 @@ import * as path from "path";
 
 const E18 = 10n ** 18n;
 const INTERVAL_MS = Number(process.env.KEEPER_INTERVAL_MS ?? "15000");
-const RELAYER_PORT = Number(process.env.RELAYER_PORT ?? "8787");
+const RELAYER_PORT = Number(process.env.RELAYER_PORT ?? "8799");
 
 const MARKETS = ["BTC", "ETH", "KUB"] as const;
 type Sym = (typeof MARKETS)[number];

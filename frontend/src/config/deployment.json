@@ -1,19 +1,19 @@
 {
-  "chainId": 31337,
+  "chainId": 25925,
   "chainName": "Bitkub Chain Testnet",
-  "rpcUrl": "http://127.0.0.1:8545",
-  "explorer": "",
+  "rpcUrl": "https://rpc-testnet.bitkubchain.io",
+  "explorer": "https://testnet.kubscan.com",
   "kusdtDecimals": 18,
   "addresses": {
-    "KUSDT": "0xB3eb6E3E501C7d89C5cB70876fFf991e0f61cE72",
-    "XKubPriceOracle": "0xdf94cD1dfF2a7218576b22CEb3A012BBEa8Cc856",
-    "XKubPerpPool": "0x647a4DC38C6324ED6A7664Ccea65Ca8277b81e27",
-    "XKubPerpMarket": "0x14C1463A031e5b01cE8b5EeC80Ad19937a246E17",
-    "XKubPerpRouter": "0xE6F1F69822117Eb5d70C47Fa723d69e1cC096A19",
-    "XKubReferral": "0x3e07Ca5C26a3b03d3Ac6d14B43a68A89d2092477"
+    "KUSDT": "0xB16F025234661aFE6Ab43EEEE8e5a688122C3D0c",
+    "XKubPriceOracle": "0x1D3cfe0DCe2d353a9c7943419Be8bcf5cB8543CA",
+    "XKubPerpPool": "0xA122f701C3972070EB19d86192B8206A6115Ce56",
+    "XKubPerpMarket": "0x00670f5CC384EC86e64b1eFa93f0c55f6D7A3F2f",
+    "XKubPerpRouter": "0xe57B01a5A8E839a1e0690C6242559813705a37c4",
+    "XKubReferral": "0x806abd5ac2cAb34D618C1b87e5337f60E069D3b7"
   },
-  "multicall3": "0xBCe7d43d04531Ef0432324A246E95918e7502f3a",
-  "relayerUrl": "http://localhost:8787/order",
+  "multicall3": "0x27bE4c35745D6d7b63d254408400413B4Bd4200B",
+  "relayerUrl": "http://localhost:8799/order",
   "markets": [
     {
       "symbol": "BTC",

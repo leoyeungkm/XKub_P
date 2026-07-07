@@ -44,12 +44,18 @@ export function usePositions() {
     query: { enabled: !!address, refetchInterval: 5000 },
   });
 
-  // On submit, poll a few times over the next several seconds so the position
-  // shows the moment its tx mines (KUB ~3s block) rather than up to 5s later.
+  // On submit, poll frequently for ~14s so the position appears/clears the moment
+  // its tx mines. Fired at CLICK time (not after the relayer replies), so the two
+  // waits overlap instead of stacking.
   useEffect(() => {
-    const burst = () => [0, 1500, 3500, 6000].forEach((d) => setTimeout(() => refetch(), d));
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const burst = () => {
+      for (const t of timers.splice(0)) clearTimeout(t);
+      [0, 1500, 3000, 4500, 6000, 8000, 10000, 12000, 14000].forEach((d) =>
+        timers.push(setTimeout(() => refetch(), d)));
+    };
     window.addEventListener("xkub:refresh", burst);
-    return () => window.removeEventListener("xkub:refresh", burst);
+    return () => { window.removeEventListener("xkub:refresh", burst); timers.forEach(clearTimeout); };
   }, [refetch]);
 
   const rows: PositionRow[] = COMBOS.map((c, i) => {

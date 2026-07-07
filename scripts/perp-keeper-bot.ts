@@ -227,14 +227,18 @@ async function liquidateUnderwater(oracle: any, market: any, keeperSigner: any) 
   }
 }
 
-// EIP-712 sign a fresh price with the keeper key (for signed-price liquidation)
+// EIP-712 sign a fresh price with the keeper key (for signed-price liquidation
+// and the one-tx gasless path). Domain is cached — it never changes.
+let priceDomain: { name: string; version: string; chainId: bigint; verifyingContract: string } | null = null;
+const PRICE_SIG_TYPES = { Price: [
+  { name: "marketId", type: "bytes32" }, { name: "price", type: "uint256" }, { name: "timestamp", type: "uint256" },
+] };
 async function signPrice(oracle: any, signer: any, marketId: string, price: bigint, timestamp: number): Promise<string> {
-  const net = await ethers.provider.getNetwork();
-  const domain = { name: "XKubPriceOracle", version: "1", chainId: net.chainId, verifyingContract: await oracle.getAddress() };
-  const types = { Price: [
-    { name: "marketId", type: "bytes32" }, { name: "price", type: "uint256" }, { name: "timestamp", type: "uint256" },
-  ] };
-  return signer.signTypedData(domain, types, { marketId, price, timestamp });
+  if (!priceDomain) {
+    const net = await ethers.provider.getNetwork();
+    priceDomain = { name: "XKubPriceOracle", version: "1", chainId: net.chainId, verifyingContract: await oracle.getAddress() };
+  }
+  return signer.signTypedData(priceDomain, PRICE_SIG_TYPES, { marketId, price, timestamp });
 }
 
 // ─── Gasless relayer (HTTP) ────────────────────────────────────────────────────

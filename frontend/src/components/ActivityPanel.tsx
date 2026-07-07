@@ -36,9 +36,10 @@ export default function ActivityPanel() {
     const key = `${p.symbol}-${p.isLong}`;
     if (closing[key]) return; // already closing — ignore repeat clicks
     setClosing((s) => ({ ...s, [key]: true }));
-    // Safety net: never let the button stick on "closing…" — clear after 12s
+    refreshPositions(); // start polling now so the row clears the moment it mines
+    // Safety net: never let the button stick on "closing…" — clear after 15s
     // even if a refetch is slow (the catch clears sooner on failure).
-    setTimeout(() => setClosing((s) => { const n = { ...s }; delete n[key]; return n; }), 12000);
+    setTimeout(() => setClosing((s) => { const n = { ...s }; delete n[key]; return n; }), 15000);
     try {
       const fee = minExecFee ?? 0n;
       // Market close: no price bound. The keeper fills at a fresh signed price

@@ -115,6 +115,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
     if (!address || !client) return toast.error("Connect wallet first");
     if (!(colNum > 0)) return toast.error("Enter collateral");
     setBusy(true);
+    refreshPositions(); // start polling now so the position shows the moment it mines
     try {
       const collateralTokens = usdToToken(parseEther(String(colNum)));
       const sizeUsd18 = parseEther(String(sizeUsd));

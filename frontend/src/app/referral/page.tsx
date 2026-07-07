@@ -14,6 +14,8 @@ import { PENDING_REF_KEY } from "@/components/RefCapture";
 const ZERO32 = "0x0000000000000000000000000000000000000000000000000000000000000000";
 const clean = (s: string) => s.toUpperCase().replace(/[^A-Z0-9_]/g, "").slice(0, 31);
 
+type CommissionRecord = { trader: string; usd: bigint; block: bigint; txHash: string; timestamp?: number };
+
 function useReferralStats(referrer?: `0x${string}`) {
   const client = usePublicClient();
   return useQuery({
@@ -21,7 +23,7 @@ function useReferralStats(referrer?: `0x${string}`) {
     enabled: !!referrer && !!client,
     refetchInterval: 20000,
     queryFn: async () => {
-      let logs: readonly { args: { trader: string; usd: bigint } }[] = [];
+      let logs: readonly { args: { trader: string; usd: bigint }; blockNumber: bigint; transactionHash: string }[] = [];
       try {
         logs = await client!.getLogs({
           address: ADDR.referral!, event: referralEventsAbi[0] as never,
@@ -30,14 +32,34 @@ function useReferralStats(referrer?: `0x${string}`) {
       } catch { /* rpc log limit */ }
       const friends = new Set<string>();
       let totalRewards = 0n;
-      for (const l of logs) { friends.add(l.args.trader.toLowerCase()); totalRewards += l.args.usd; }
+      const records: CommissionRecord[] = [];
+      for (const l of logs) {
+        friends.add(l.args.trader.toLowerCase());
+        totalRewards += l.args.usd;
+        records.push({ trader: l.args.trader, usd: l.args.usd, block: l.blockNumber, txHash: l.transactionHash });
+      }
+      // Block timestamps for display
+      const stamps = new Map<bigint, number>();
+      await Promise.all([...new Set(records.map((r) => r.block))].map(async (bn) => {
+        try { stamps.set(bn, Number((await client!.getBlock({ blockNumber: bn })).timestamp)); } catch {}
+      }));
+      for (const r of records) r.timestamp = stamps.get(r.block);
+      records.sort((a, b) => Number(b.block - a.block));
       // Estimate referred volume from rewards: reward = vol × baseFee × rebate
       const rewardsUsd = Number(formatEther(totalRewards));
       const estVol = rewardsUsd / ((BASE_FEE_BPS / 10000) * (1000 / 10000)); // 10% rebate default
-      return { friends: friends.size, totalRewards, estVol };
+      return { friends: friends.size, totalRewards, estVol, records };
     },
   });
 }
+
+const fmtTime = (ts?: number) => {
+  if (!ts) return "—";
+  const d = new Date(ts * 1000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+const shortAddr = (a: string) => a.slice(0, 6) + "…" + a.slice(-4);
 
 export default function Referral() {
   const { address, isConnected } = useAccount();
@@ -74,6 +96,11 @@ export default function Referral() {
       if (pending) setBindCode(pending);
     }
   }, [referredBy]);
+
+  // Auto-suggest a code (from the address) so the user has a ready-to-go link.
+  useEffect(() => {
+    if (address && !myCode && !newCode) setNewCode(clean(address.slice(2, 8)));
+  }, [address, myCode, newCode]);
 
   if (!enabled) return <Center>Referrals are not enabled on this deployment.</Center>;
   if (!isConnected) return <Center>Connect a wallet to manage referrals.</Center>;
@@ -148,17 +175,26 @@ export default function Referral() {
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
-              <p className="text-[12.5px] text-muted">註冊一個專屬 code 開始賺佣金（一人一個）。</p>
-              <div className="flex gap-2">
-                <div className="flex flex-1 items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent/60">
-                  <input value={newCode} onChange={(e) => setNewCode(clean(e.target.value))} placeholder="YOURCODE"
-                    className="tnum w-full bg-transparent py-2.5 uppercase tracking-wide outline-none" />
+              <p className="text-[12.5px] text-muted">我哋已為你準備好一個邀請碼，一撳即用（可自訂）。</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-md bg-bg px-3.5 py-3">
+                  <div className="eyebrow mb-1">邀請碼 · Code</div>
+                  <div className="flex items-center rounded-md border border-line bg-panel px-2.5 focus-within:border-accent/60">
+                    <input value={newCode} onChange={(e) => setNewCode(clean(e.target.value))} placeholder="YOURCODE"
+                      className="tnum w-full bg-transparent py-2 text-[15px] uppercase tracking-wide outline-none" />
+                  </div>
                 </div>
-                <button onClick={register} disabled={busy}
-                  className="rounded-md bg-accent px-5 text-[13px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40">
-                  註冊 Code
-                </button>
+                <div className="rounded-md bg-bg px-3.5 py-3">
+                  <div className="eyebrow mb-1">預覽連結 · Preview</div>
+                  <div className="truncate pt-2 text-[12px] text-muted">
+                    {typeof window !== "undefined" ? `${window.location.origin}/?ref=${newCode || "…"}` : ""}
+                  </div>
+                </div>
               </div>
+              <button onClick={register} disabled={busy || newCode.length < 3}
+                className="rounded-md bg-accent py-2.5 text-[14px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40">
+                {busy ? "生成中…" : "生成我的邀請連結"}
+              </button>
             </div>
           )}
         </div>
@@ -210,6 +246,35 @@ export default function Referral() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Commission details */}
+      <div className="overflow-hidden rounded-lg border border-line bg-panel">
+        <h3 className="eyebrow border-b border-line px-3.5 py-2.5">佣金明細 · Referral Commission Details</h3>
+        {!stats.data || stats.data.records.length === 0 ? (
+          <div className="px-3.5 py-8 text-center text-[12px] text-mutedDim">No Referral Records</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr className="eyebrow text-left">
+                  {["時間", "被邀請人", "佣金"].map((h) => (
+                    <th key={h} className="border-b border-line px-3.5 py-2 font-normal">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {stats.data.records.map((r, i) => (
+                  <tr key={r.txHash + i} className="border-b border-lineSoft last:border-0 hover:bg-panel2/40">
+                    <td className="tnum px-3.5 py-2.5 text-muted">{fmtTime(r.timestamp)}</td>
+                    <td className="tnum px-3.5 py-2.5">{shortAddr(r.trader)}</td>
+                    <td className="tnum px-3.5 py-2.5 text-green">+{fmtUsd(r.usd)} USD</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </main>
   );

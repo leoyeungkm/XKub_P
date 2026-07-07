@@ -59,16 +59,24 @@ describe("XKub Perp — fee tiers & protocol split", () => {
     expect(p.collateralUsd).to.equal(usd(999)); // 1000 - 1 fee
   });
 
-  it("auto-upgrades tier by cumulative volume", async () => {
-    const { market, trader, admin } = await loadFixture(deployFixture);
+  it("auto-upgrades tier by 14-day volume, and decays after the window", async () => {
+    const { market, trader, admin, oracle } = await loadFixture(deployFixture);
     await market.connect(admin).setTierDiscount(1, 1000);   // VIP1 10% off
-    await market.connect(admin).setVolumeThreshold(1, usd(20_000)); // need 20k volume
+    await market.connect(admin).setVolumeThreshold(1, usd(20_000)); // need 20k in 14 days
 
     expect(await market.earnedTier(trader.address)).to.equal(0);
-    // trade 25k volume total → crosses the 20k threshold
+    // trade 25k → crosses the threshold within the window
     await market.connect(trader).increasePosition(BTC, true, usd(3_000), usd(25_000));
+    expect(await market.weightedVolumeUsd(trader.address)).to.equal(usd(25_000));
     expect(await market.earnedTier(trader.address)).to.equal(1);
     expect(await market.effectiveFeeBps(trader.address)).to.equal(2); // 3bps → 10% off → 2
+
+    // 15 days later the old volume has rolled out of the window → tier decays
+    await time.increase(15 * 24 * 3600);
+    await oracle.forceSetPrice(BTC, usd(50_000)); // refresh price (not stale)
+    expect(await market.weightedVolumeUsd(trader.address)).to.equal(0n);
+    expect(await market.earnedTier(trader.address)).to.equal(0);
+    expect(await market.userVolumeUsd(trader.address)).to.equal(usd(25_000)); // lifetime unchanged
   });
 
   it("effective tier is the higher of earned and manual", async () => {

@@ -162,7 +162,7 @@ function VipCard() {
   const { data } = useReadContracts({
     contracts: address ? [
       { address: ADDR.market, abi: marketAbi, functionName: "effectiveTier", args: [address] },
-      { address: ADDR.market, abi: marketAbi, functionName: "userVolumeUsd", args: [address] },
+      { address: ADDR.market, abi: marketAbi, functionName: "weightedVolumeUsd", args: [address] },
     ] as never[] : [],
     query: { enabled: !!address, refetchInterval: 10000 },
   });
@@ -184,7 +184,7 @@ function VipCard() {
       <div className="flex flex-col gap-3 p-3.5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <div className="eyebrow mb-1">你的交易量 · Traded Volume</div>
+            <div className="eyebrow mb-1">14 日交易量 · 14-Day Volume</div>
             <div className="tnum text-[20px] font-semibold">{fmtNum(volume, 0)} <span className="text-[12px] text-mutedDim">USD</span></div>
           </div>
           {next ? (
@@ -205,7 +205,7 @@ function VipCard() {
           <table className="w-full text-[12px]">
             <thead>
               <tr className="eyebrow text-left">
-                {["等級", "需累計交易量", "交易費率", "折扣"].map((h) => (
+                {["等級", "需 14 日交易量", "交易費率", "折扣"].map((h) => (
                   <th key={h} className="whitespace-nowrap border-b border-line px-2.5 py-1.5 font-normal">{h}</th>
                 ))}
               </tr>
@@ -225,7 +225,7 @@ function VipCard() {
           </table>
         </div>
         <p className="text-[11px] leading-relaxed text-mutedDim">
-          等級按累計交易量自動升級（成交即時計入）。交易越多，手續費越低。
+          等級按過去 14 日交易量自動升級（成交即時計入，14 日後滾出窗口）。交易越多，手續費越低。
         </p>
       </div>
     </div>

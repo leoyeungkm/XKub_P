@@ -130,9 +130,11 @@ contract XKubPerpMarket is ReentrancyGuard {
     // effective tier is the higher of the two.
     mapping(address => uint8)  public feeTier;            // manual override tier
     mapping(uint8 => uint256)  public tierDiscountBps;    // tier → % off the fee (bps)
-    mapping(uint8 => uint256)  public volumeThreshold;    // tier → cumulative volume (USD 1e18) to earn it
-    mapping(address => uint256) public userVolumeUsd;     // cumulative traded notional
+    mapping(uint8 => uint256)  public volumeThreshold;    // tier → 14-day volume (USD 1e18) to earn it
+    mapping(address => uint256) public userVolumeUsd;     // lifetime traded notional (display)
+    mapping(address => mapping(uint256 => uint256)) public dailyVolumeUsd; // trader → dayIndex → volume
     uint8 public constant MAX_TIER = 10;
+    uint256 public constant VOLUME_WINDOW_DAYS = 14;      // rolling window for tier volume
 
     // Protocol revenue: a share of every position fee is routed to the treasury
     // (drawn from the pool after the fee lands there, like referral rebates).
@@ -276,7 +278,8 @@ contract XKubPerpMarket is ReentrancyGuard {
             // check — they only ever improve position health.
             require(p.sizeUsd <= (p.collateralUsd + openFeeUsd) * cfg.maxLeverageX, "leverage too high");
             lastIncreaseAt[key] = uint64(block.timestamp); // start the rapid-close clock
-            userVolumeUsd[owner] += sizeDeltaUsd;          // for VIP volume tiers
+            userVolumeUsd[owner] += sizeDeltaUsd;                          // lifetime (display)
+            dailyVolumeUsd[owner][block.timestamp / 1 days] += sizeDeltaUsd; // for 14-day VIP tiers
         }
 
         require(p.collateralUsd >= minCollateralUsd, "collateral < min");
@@ -626,9 +629,17 @@ contract XKubPerpMarket is ReentrancyGuard {
         if (tokens > 0) kusdt.safeTransfer(address(pool), tokens);
     }
 
-    /// @notice Highest VIP tier a trader has earned by cumulative volume.
+    /// @notice A trader's trailing 14-day traded volume (USD 1e18).
+    function weightedVolumeUsd(address trader) public view returns (uint256 total) {
+        uint256 today = block.timestamp / 1 days;
+        for (uint256 i = 0; i < VOLUME_WINDOW_DAYS && i <= today; i++) {
+            total += dailyVolumeUsd[trader][today - i];
+        }
+    }
+
+    /// @notice Highest VIP tier a trader has earned by 14-day volume.
     function earnedTier(address trader) public view returns (uint8) {
-        uint256 vol = userVolumeUsd[trader];
+        uint256 vol = weightedVolumeUsd(trader);
         uint8 best = 0;
         for (uint8 t = 1; t <= MAX_TIER; t++) {
             uint256 thr = volumeThreshold[t];

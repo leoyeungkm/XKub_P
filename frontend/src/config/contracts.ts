@@ -65,6 +65,7 @@ export const marketAbi = parseAbi([
   "function earnedTier(address trader) view returns (uint8)",
   "function effectiveTier(address trader) view returns (uint8)",
   "function userVolumeUsd(address trader) view returns (uint256)",
+  "function weightedVolumeUsd(address trader) view returns (uint256)",
   "function maintenanceMarginBps() view returns (uint256)",
   "function rapidCloseFeeBps() view returns (uint256)",
   "function rapidCloseWindow() view returns (uint256)",

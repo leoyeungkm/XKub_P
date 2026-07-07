@@ -116,7 +116,7 @@ async function main() {
   // directTradingEnabled stays FALSE — all orders go through the router
 
   // ─── Protocol revenue + VIP fee tiers ───────────────────────────────────────
-  const treasury = process.env.TREASURY_ADDRESS ?? deployer.address;
+  const treasury = process.env.TREASURY_ADDRESS || deployer.address;
   await (await market.setTreasury(treasury)).wait();
   await (await market.setProtocolFeeShareBps(Number(process.env.PROTOCOL_FEE_SHARE_BPS ?? "3000"))).wait(); // 30% of fees
   // VIP tiers: tier 1 = 10% off, tier 2 = 25% off, tier 3 = 50% off (tier 0 = default)
@@ -132,7 +132,7 @@ async function main() {
   }
   console.log(`Treasury: ${treasury} · protocol fee share 30% · VIP tiers 1/2/3 = 10/25/50% off (vol 50k/250k/1M)`);
 
-  const keeper = process.env.KEEPER_ADDRESS ?? deployer.address;
+  const keeper = process.env.KEEPER_ADDRESS || deployer.address;
   await (await oracle.setKeeper(keeper, true)).wait();
   await (await router.setKeeper(keeper, true)).wait();
   console.log(`Keeper: ${keeper}`);

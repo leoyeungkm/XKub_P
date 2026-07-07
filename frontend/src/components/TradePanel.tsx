@@ -175,6 +175,8 @@ export default function TradePanel({ symbol }: { symbol: string }) {
   };
 
   const borrowRate = isLong ? fees.longRatePerHour : fees.shortRatePerHour;
+  // One direction per market: block opening the opposite side while a position is open.
+  const oppositeOpen = account.positions.some((p) => p.symbol === symbol && p.isLong !== isLong);
 
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-panel">
@@ -346,14 +348,20 @@ export default function TradePanel({ symbol }: { symbol: string }) {
           </div>
         </div>
 
+        {oppositeOpen && (
+          <div className="rounded-md border border-red/40 bg-redDim/50 px-3 py-2 text-[11.5px] leading-relaxed text-red">
+            你已持有 {symbol} 嘅{isLong ? "空" : "多"}倉。一個市場只可單邊持倉——請先平掉反方向倉位。
+          </div>
+        )}
         <button
           onClick={submit}
-          disabled={busy}
+          disabled={busy || oppositeOpen}
           className={`rounded-md py-3 text-[14px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40 ${
             isLong ? "bg-green" : "bg-red"
           }`}
         >
-          {busy ? "Submitting…" : `${oneClick.active ? "⚡ " : ""}${isLong ? "Buy / Long" : "Sell / Short"} ${symbol}`}
+          {busy ? "Submitting…" : oppositeOpen ? `先平掉 ${symbol} ${isLong ? "空" : "多"}倉`
+            : `${oneClick.active ? "⚡ " : ""}${isLong ? "Buy / Long" : "Sell / Short"} ${symbol}`}
         </button>
 
         <div className="text-[11px] leading-relaxed text-mutedDim">

@@ -230,6 +230,14 @@ contract XKubPerpMarket is ReentrancyGuard {
         Position storage p = positions[key];
         require(p.sizeUsd > 0 || sizeDeltaUsd > 0, "empty open");
 
+        // One direction per account per market. Holding both sides would let a
+        // trader exploit the asymmetry between the 900% profit cap and the 100%
+        // liquidation floor (a hedged straddle that drains the LP pool on a big
+        // move). Close the opposite side first.
+        if (sizeDeltaUsd > 0) {
+            require(positions[_positionKey(owner, marketId, !isLong)].sizeUsd == 0, "opposite side open");
+        }
+
         if (collateralTokens > 0) {
             kusdt.safeTransferFrom(payer, address(this), collateralTokens);
             p.collateralUsd += collateralTokens * scaler;

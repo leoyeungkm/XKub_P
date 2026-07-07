@@ -229,6 +229,18 @@ describe("XKub Perp", () => {
       await expect(market.connect(trader).increasePosition(BTC, true, usd(20_000), usd(1_100_000)))
         .to.be.revertedWith("OI cap");
     });
+
+    it("blocks holding long and short on the same market (anti-straddle)", async () => {
+      const { market, trader } = await loadFixture(fundedFixture);
+      await market.connect(trader).increasePosition(BTC, true, usd(1_000), usd(5_000)); // long
+      // opening a short on the same market is rejected while the long is open
+      await expect(market.connect(trader).increasePosition(BTC, false, usd(1_000), usd(5_000)))
+        .to.be.revertedWith("opposite side open");
+      // after closing the long, the short is allowed
+      await market.connect(trader).decreasePosition(BTC, true, usd(5_000));
+      await market.connect(trader).increasePosition(BTC, false, usd(1_000), usd(5_000));
+      expect((await market.getPosition(trader.address, BTC, false)).sizeUsd).to.equal(usd(5_000));
+    });
   });
 
   // ─── Borrow fees ───────────────────────────────────────────────────────────

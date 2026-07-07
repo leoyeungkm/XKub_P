@@ -31,6 +31,7 @@ const config: HardhatUserConfig = {
       url: "https://rpc-testnet.bitkubchain.io",
       chainId: 25925,
       accounts: [KUB_PRIVATE_KEY],
+      gasPrice: 55_000_000_000, // 55 gwei — testnet min is ~50; default 186 was ~4x costlier
     },
     kubLayer2Testnet: {
       url: "https://kublayer2.testnet.kubchain.io",

@@ -9,6 +9,7 @@ import { ADDR, b32, parseB32, routerAbi } from "@/config/contracts";
 import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
 import { usePositions, useHistory, type PositionRow, type HistoryItem } from "@/lib/portfolio";
+import TpSlModal from "./TpSlModal";
 
 type Tab = "positions" | "orders" | "history";
 
@@ -100,9 +101,11 @@ export default function ActivityPanel() {
 const HEAD = ["幣種", "數量", "方向", "倉位價值", "開倉價格", "當前價格", "初始保證金", "倉位盈虧 (回報率)", "預估強平價", "止盈/止損", ""];
 
 function PositionsView({ rows, onClose }: { rows: PositionRow[]; onClose: (p: PositionRow) => void }) {
+  const [tpsl, setTpsl] = useState<PositionRow | null>(null);
   if (rows.length === 0) return <Empty>No open positions</Empty>;
   return (
     <div className="overflow-x-auto">
+      {tpsl && <TpSlModal pos={tpsl} onClose={() => setTpsl(null)} />}
       <table className="w-full min-w-[900px] text-[12.5px]">
         <thead>
           <tr className="eyebrow text-left">
@@ -137,7 +140,11 @@ function PositionsView({ rows, onClose }: { rows: PositionRow[]; onClose: (p: Po
                   {up ? "+" : ""}{fmtUsd(p.pnl)} <span className="text-[11px] opacity-80">({up ? "+" : ""}{retPct.toFixed(2)}%)</span>
                 </td>
                 <td className="tnum px-3 py-2.5">{lev > 1 ? `$${fmtNum(liq, liq >= 100 ? 1 : 4)}` : "—"}</td>
-                <td className="px-3 py-2.5 text-mutedDim">— / —</td>
+                <td className="px-3 py-2.5">
+                  <button onClick={() => setTpsl(p)} className="rounded border border-line px-2 py-1 text-[11px] text-muted transition-colors hover:border-accent/50 hover:text-accent">
+                    設定 TP/SL
+                  </button>
+                </td>
                 <td className="px-3 py-2.5 text-right">
                   <button onClick={() => onClose(p)} className="rounded border border-line px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-red/50 hover:text-red">
                     市價平倉

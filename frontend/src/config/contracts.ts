@@ -1,4 +1,4 @@
-import { defineChain, parseAbi, stringToHex, type Hex } from "viem";
+import { defineChain, keccak256, parseAbi, stringToHex, type Hex } from "viem";
 import deployment from "./deployment.json";
 
 export const CFG = deployment;
@@ -86,7 +86,19 @@ export const routerAbi = parseAbi([
   "function collateralBalance(address owner) view returns (uint256)",
   "function createIncreaseRequestFor(address owner, bytes32 marketId, bool isLong, uint256 collateralTokens, uint256 sizeDeltaUsd, uint256 acceptablePrice) payable returns (uint256)",
   "function createDecreaseRequestFor(address owner, bytes32 marketId, bool isLong, uint256 sizeDeltaUsd, uint256 acceptablePrice) payable returns (uint256)",
+  // TP/SL triggers
+  "function setTrigger(bytes32 marketId, bool isLong, uint256 tpPrice, uint256 slPrice) payable",
+  "function setTriggerFor(address owner, bytes32 marketId, bool isLong, uint256 tpPrice, uint256 slPrice) payable",
+  "function cancelTrigger(bytes32 marketId, bool isLong)",
+  "function cancelTriggerFor(address owner, bytes32 marketId, bool isLong)",
+  "function triggers(bytes32 key) view returns (uint256 tpPrice, uint256 slPrice, uint256 executionFee, bool active)",
 ]);
+
+// keccak256(abi.encodePacked(owner, marketId, isLong)) — matches the router
+export const triggerKey = (owner: `0x${string}`, symbol: string, isLong: boolean): Hex => {
+  const packed = (owner.slice(2) + b32(symbol).slice(2) + (isLong ? "01" : "00")).toLowerCase();
+  return keccak256(("0x" + packed) as Hex);
+};
 
 export const poolAbi = parseAbi([
   "function deposit(uint256 kusdtAmount) returns (uint256)",

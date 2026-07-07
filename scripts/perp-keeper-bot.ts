@@ -112,6 +112,31 @@ async function executePending(router: any) {
   }
 }
 
+async function executeTriggers(router: any, oracle: any, market: any) {
+  const count: bigint = await market.openPositionCount();
+  const PAGE = 100n;
+  for (let offset = 0n; offset < count; offset += PAGE) {
+    const [, metas] = await market.getOpenPositions(offset, PAGE);
+    for (const m of metas) {
+      try {
+        const key = ethers.solidityPackedKeccak256(
+          ["address", "bytes32", "bool"], [m.owner, m.marketId, m.isLong]);
+        const t = await router.triggers(key);
+        if (!t.active) continue;
+        const [price] = await oracle.peekPrice(m.marketId);
+        const tpHit = t.tpPrice > 0n && (m.isLong ? price >= t.tpPrice : price <= t.tpPrice);
+        const slHit = t.slPrice > 0n && (m.isLong ? price <= t.slPrice : price >= t.slPrice);
+        if (!tpHit && !slHit) continue;
+        const tx = await router.executeTrigger(m.owner, m.marketId, m.isLong);
+        await tx.wait();
+        console.log(`[${now()}] ${tpHit ? "TP" : "SL"} closed ${m.owner} ${ethers.decodeBytes32String(m.marketId)} ${m.isLong ? "long" : "short"}`);
+      } catch (e: any) {
+        console.error(`[${now()}] trigger exec failed: ${e.message ?? e}`);
+      }
+    }
+  }
+}
+
 async function liquidateUnderwater(market: any) {
   const count: bigint = await market.openPositionCount();
   const PAGE = 100n;
@@ -155,6 +180,9 @@ async function main() {
 
     try { await executePending(router); }
     catch (e: any) { console.error(`[${now()}] execute round failed: ${e.message ?? e}`); }
+
+    try { await executeTriggers(router, oracle, market); }
+    catch (e: any) { console.error(`[${now()}] trigger round failed: ${e.message ?? e}`); }
 
     try { await liquidateUnderwater(market); }
     catch (e: any) { console.error(`[${now()}] liquidation round failed: ${e.message ?? e}`); }

@@ -52,6 +52,8 @@ interface IXKubPerpMarketRouted {
     function increasePositionFor(address owner, bytes32 marketId, bool isLong, uint256 collateralTokens, uint256 sizeDeltaUsd) external;
     function decreasePositionFor(address owner, bytes32 marketId, bool isLong, uint256 sizeDeltaUsd) external;
     function maxPriceAge() external view returns (uint256);
+    function getPosition(address owner, bytes32 marketId, bool isLong)
+        external view returns (uint256 sizeUsd, uint256 sizeTokens, uint256 collateralUsd, uint256 entryBorrowX18);
 }
 
 contract XKubPerpRouter is ReentrancyGuard {
@@ -93,6 +95,17 @@ contract XKubPerpRouter is ReentrancyGuard {
     uint256 public maxExecuteAge   = 300;         // requests older → cancel only
     uint256 public cancelDelay     = 60;          // owner self-cancel after
 
+    // Take-profit / stop-loss trigger orders. One per (owner, market, side);
+    // the keeper closes the whole position when the oracle price crosses a
+    // trigger. Prices are USD 1e18; 0 disables that side.
+    struct Trigger {
+        uint256 tpPrice;       // take-profit trigger
+        uint256 slPrice;       // stop-loss trigger
+        uint256 executionFee;  // native KUB for the executing keeper
+        bool    active;
+    }
+    mapping(bytes32 => Trigger) public triggers; // key = keccak(owner, marketId, isLong)
+
     event RequestCreated(uint256 indexed id, address indexed owner, bytes32 indexed marketId,
         bool isLong, bool isIncrease, uint256 collateralTokens, uint256 sizeDeltaUsd,
         uint256 acceptablePrice, uint256 executionFee);
@@ -104,6 +117,9 @@ contract XKubPerpRouter is ReentrancyGuard {
     event CollateralWithdrawn(address indexed owner, uint256 tokens);
     event ParamsUpdated(uint256 minExecutionFee, uint256 maxExecuteAge, uint256 cancelDelay);
     event AdminChanged(address indexed oldAdmin, address indexed newAdmin);
+    event TriggerSet(address indexed owner, bytes32 indexed marketId, bool isLong, uint256 tpPrice, uint256 slPrice);
+    event TriggerCancelled(address indexed owner, bytes32 indexed marketId, bool isLong, address indexed by);
+    event TriggerExecuted(address indexed owner, bytes32 indexed marketId, bool isLong, address keeper, uint256 price, bool tp);
 
     modifier onlyAdmin() {
         require(msg.sender == admin, "!admin");
@@ -237,6 +253,87 @@ contract XKubPerpRouter is ReentrancyGuard {
         }));
         emit RequestCreated(id, owner, marketId, isLong, isIncrease,
             collateralTokens, sizeDeltaUsd, acceptablePrice, msg.value);
+    }
+
+    // ─── Take-profit / stop-loss triggers ──────────────────────────────────────
+
+    function _triggerKey(address owner, bytes32 marketId, bool isLong) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(owner, marketId, isLong));
+    }
+
+    /// @notice Set (or replace) a TP/SL for your position. Escrows an execution
+    ///         fee the keeper collects when it triggers. Replacing refunds the
+    ///         previous fee. Either price may be 0 to leave that side unset.
+    function setTrigger(bytes32 marketId, bool isLong, uint256 tpPrice, uint256 slPrice)
+        external payable nonReentrant
+    {
+        _setTrigger(msg.sender, marketId, isLong, tpPrice, slPrice);
+    }
+
+    /// @notice Agent version — set a TP/SL on the owner's behalf.
+    function setTriggerFor(address owner, bytes32 marketId, bool isLong, uint256 tpPrice, uint256 slPrice)
+        external payable nonReentrant
+    {
+        require(isAgent[owner][msg.sender], "!agent");
+        _setTrigger(owner, marketId, isLong, tpPrice, slPrice);
+    }
+
+    function _setTrigger(address owner, bytes32 marketId, bool isLong, uint256 tpPrice, uint256 slPrice) internal {
+        require(tpPrice > 0 || slPrice > 0, "empty");
+        require(msg.value >= minExecutionFee, "fee too low");
+        bytes32 k = _triggerKey(owner, marketId, isLong);
+        Trigger storage t = triggers[k];
+        if (t.active && t.executionFee > 0) _payNative(owner, t.executionFee); // refund prior fee
+        triggers[k] = Trigger(tpPrice, slPrice, msg.value, true);
+        emit TriggerSet(owner, marketId, isLong, tpPrice, slPrice);
+    }
+
+    /// @notice Cancel your TP/SL and get the escrowed fee back. Owner or agent.
+    function cancelTrigger(bytes32 marketId, bool isLong) external nonReentrant {
+        _cancelTrigger(msg.sender, marketId, isLong, msg.sender);
+    }
+    function cancelTriggerFor(address owner, bytes32 marketId, bool isLong) external nonReentrant {
+        require(isAgent[owner][msg.sender], "!agent");
+        _cancelTrigger(owner, marketId, isLong, owner);
+    }
+    function _cancelTrigger(address owner, bytes32 marketId, bool isLong, address feeTo) internal {
+        bytes32 k = _triggerKey(owner, marketId, isLong);
+        Trigger storage t = triggers[k];
+        require(t.active, "no trigger");
+        uint256 fee = t.executionFee;
+        delete triggers[k];
+        _payNative(feeTo, fee);
+        emit TriggerCancelled(owner, marketId, isLong, msg.sender);
+    }
+
+    /// @notice Keeper: close the whole position when its TP/SL is hit at the
+    ///         fresh oracle price. If the position is already gone, the trigger
+    ///         is cleared and the fee refunded to the owner.
+    function executeTrigger(address owner, bytes32 marketId, bool isLong) external nonReentrant onlyKeeper {
+        bytes32 k = _triggerKey(owner, marketId, isLong);
+        Trigger storage t = triggers[k];
+        require(t.active, "no trigger");
+
+        (uint256 sizeUsd,,,) = market.getPosition(owner, marketId, isLong);
+        uint256 fee = t.executionFee;
+
+        // Position closed elsewhere → clean up, refund the owner.
+        if (sizeUsd == 0) {
+            delete triggers[k];
+            _payNative(owner, fee);
+            emit TriggerCancelled(owner, marketId, isLong, msg.sender);
+            return;
+        }
+
+        uint256 price = oracle.getPrice(marketId, market.maxPriceAge());
+        bool tpHit = t.tpPrice > 0 && (isLong ? price >= t.tpPrice : price <= t.tpPrice);
+        bool slHit = t.slPrice > 0 && (isLong ? price <= t.slPrice : price >= t.slPrice);
+        require(tpHit || slHit, "not triggered");
+
+        delete triggers[k];
+        market.decreasePositionFor(owner, marketId, isLong, sizeUsd); // close full at fresh price
+        _payNative(msg.sender, fee);
+        emit TriggerExecuted(owner, marketId, isLong, msg.sender, price, tpHit);
     }
 
     // ─── Keeper: execute ───────────────────────────────────────────────────────

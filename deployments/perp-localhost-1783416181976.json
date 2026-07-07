@@ -1,0 +1,42 @@
+{
+  "network": "localhost",
+  "chainId": 31337,
+  "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "deployedAt": "2026-07-07T09:23:01.975Z",
+  "kusdtDecimals": 18,
+  "addresses": {
+    "KUSDT": "0xC0BC9E77BBBAB5D2Fc64f3af97234747b9F592D6",
+    "XKubPriceOracle": "0x6c198aa7D4817c62dE7A338316769Be784167646",
+    "XKubPerpPool": "0x18e457e33443f8aCB99Ec5845123D4b3202dc2A7",
+    "XKubPerpMarket": "0x522CbdD0C1c7b7b9C037CFCa2BcAf08fE1d9b38E",
+    "XKubPerpRouter": "0x3721472089bFe55c1E761c4Bb1776a731eca9817",
+    "XKubReferral": "0x43774Ca5A31E3600B973c6d20f7302f33FF9c6FD"
+  },
+  "keeper": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "markets": [
+    {
+      "symbol": "BTC",
+      "maxLeverageX": 10,
+      "maxOiUsd": "500000.0",
+      "borrowRateFactorBps": 10
+    },
+    {
+      "symbol": "ETH",
+      "maxLeverageX": 10,
+      "maxOiUsd": "300000.0",
+      "borrowRateFactorBps": 10
+    },
+    {
+      "symbol": "KUB",
+      "maxLeverageX": 5,
+      "maxOiUsd": "100000.0",
+      "borrowRateFactorBps": 20
+    }
+  ],
+  "notes": {
+    "oracle": "keeper-posted prices — run scripts/perp-keeper-bot.ts continuously",
+    "pool": "deposit KUSDT → mint XPLP; pool is counterparty to all positions",
+    "market": "direct trading DISABLED — all orders go through XKubPerpRouter (two-step)",
+    "router": "createIncreaseRequest / createDecreaseRequest with executionFee; keeper executes"
+  }
+}

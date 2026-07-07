@@ -32,6 +32,11 @@ const config: HardhatUserConfig = {
       chainId: 25925,
       accounts: [KUB_PRIVATE_KEY],
     },
+    kubLayer2Testnet: {
+      url: "https://kublayer2.testnet.kubchain.io",
+      chainId: 259251,
+      accounts: [KUB_PRIVATE_KEY],
+    },
     kubMainnet: {
       url: "https://rpc.bitkubchain.io",
       chainId: 96,

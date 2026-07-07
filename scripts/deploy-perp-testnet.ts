@@ -44,18 +44,19 @@ async function main() {
   let kusdtAddress = process.env.KUSDT_ADDRESS ?? "";
   let kusdtDecimals = Number(process.env.KUSDT_DECIMALS ?? "18");
   if (!kusdtAddress) {
-    if (isLocal) {
+    if (network.name === "kubTestnet") {
+      kusdtAddress = TESTNET_MOCK_KUSDT;
+      kusdtDecimals = 18;
+      console.log(`Reusing testnet mock KUSDT: ${kusdtAddress}`);
+    } else if (network.name === "kubMainnet") {
+      throw new Error("KUSDT_ADDRESS is required on mainnet");
+    } else {
+      // local / L2 testnet / any other test network → deploy a fresh mock
       const mock = await ethers.deployContract("MockERC20", ["Mock KUSDT", "KUSDT", 18]);
       await mock.waitForDeployment();
       kusdtAddress = await mock.getAddress();
       kusdtDecimals = 18;
       console.log(`Deployed MockERC20 KUSDT: ${kusdtAddress}`);
-    } else if (network.name === "kubTestnet") {
-      kusdtAddress = TESTNET_MOCK_KUSDT;
-      kusdtDecimals = 18;
-      console.log(`Reusing testnet mock KUSDT: ${kusdtAddress}`);
-    } else {
-      throw new Error("KUSDT_ADDRESS is required on mainnet");
     }
   }
 
@@ -212,12 +213,15 @@ async function main() {
   // ─── Frontend config ───────────────────────────────────────────────────────
   const rpcUrl = network.name === "kubTestnet" ? "https://rpc-testnet.bitkubchain.io"
     : network.name === "kubMainnet" ? "https://rpc.bitkubchain.io"
+    : network.name === "kubLayer2Testnet" ? "https://kublayer2.testnet.kubchain.io"
     : "http://127.0.0.1:8545";
   const explorer = network.name === "kubTestnet" ? "https://testnet.kubscan.com"
-    : network.name === "kubMainnet" ? "https://www.kubscan.com" : "";
+    : network.name === "kubMainnet" ? "https://www.kubscan.com"
+    : network.name === "kubLayer2Testnet" ? "https://kublayer2.testnet.kubscan.com" : "";
   const cfg = {
     chainId: out.chainId,
-    chainName: network.name === "kubMainnet" ? "Bitkub Chain" : "Bitkub Chain Testnet",
+    chainName: network.name === "kubMainnet" ? "Bitkub Chain"
+      : network.name === "kubLayer2Testnet" ? "KUB Layer 2 Testnet" : "Bitkub Chain Testnet",
     rpcUrl, explorer,
     kusdtDecimals,
     addresses: out.addresses,

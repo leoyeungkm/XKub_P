@@ -423,9 +423,24 @@ contract XKubPerpMarket is ReentrancyGuard {
         return equity <= int256((p.sizeUsd * maintenanceMarginBps) / 10000);
     }
 
+    /// @notice Liquidate carrying a keeper-signed fresh price — applies it to the
+    ///         oracle first so gap moves are caught immediately with minimal bad
+    ///         debt. Permissionless: anyone with a valid signed price can call.
+    function liquidateWithSignedPrice(
+        address owner, bytes32 marketId, bool isLong,
+        uint256 price, uint256 timestamp, bytes calldata sig
+    ) external nonReentrant {
+        oracle.applySignedPrice(marketId, price, timestamp, sig);
+        _liquidate(owner, marketId, isLong);
+    }
+
     /// @notice Liquidate an underwater position. Keeper gets liquidationFeeUsd,
     ///         any remaining equity is refunded to the trader, rest to the pool.
     function liquidate(address owner, bytes32 marketId, bool isLong) external nonReentrant {
+        _liquidate(owner, marketId, isLong);
+    }
+
+    function _liquidate(address owner, bytes32 marketId, bool isLong) internal {
         bytes32 key = _positionKey(owner, marketId, isLong);
         Position storage p = positions[key];
         require(p.sizeUsd > 0, "!position");

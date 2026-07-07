@@ -5,14 +5,14 @@
   "explorer": "",
   "kusdtDecimals": 18,
   "addresses": {
-    "KUSDT": "0x3966F0F73C353F5FD29C4CDE84a00719aA1EA825",
-    "XKubPriceOracle": "0x44C64d276BDE0f0917FFF5a066302a7902225558",
-    "XKubPerpPool": "0x7785D88EcBe340BcB93aB1bcc38DE8b91dcAc44A",
-    "XKubPerpMarket": "0xfA22272340fC3F46E34bE64A372572708Ef31e4a",
-    "XKubPerpRouter": "0x5D07c7111596b650303022f2121D6De20FBC19Ff",
-    "XKubReferral": "0x70445a861DC59325Ee40532c951C736e20a31C3e"
+    "KUSDT": "0xB3eb6E3E501C7d89C5cB70876fFf991e0f61cE72",
+    "XKubPriceOracle": "0xdf94cD1dfF2a7218576b22CEb3A012BBEa8Cc856",
+    "XKubPerpPool": "0x647a4DC38C6324ED6A7664Ccea65Ca8277b81e27",
+    "XKubPerpMarket": "0x14C1463A031e5b01cE8b5EeC80Ad19937a246E17",
+    "XKubPerpRouter": "0xE6F1F69822117Eb5d70C47Fa723d69e1cC096A19",
+    "XKubReferral": "0x3e07Ca5C26a3b03d3Ac6d14B43a68A89d2092477"
   },
-  "multicall3": "0xDa1c8c71852D5608c7df253A240b1D41216A61B0",
+  "multicall3": "0xBCe7d43d04531Ef0432324A246E95918e7502f3a",
   "relayerUrl": "http://localhost:8787/order",
   "markets": [
     {

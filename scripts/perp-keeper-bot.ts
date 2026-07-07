@@ -171,7 +171,7 @@ async function executeTriggers(router: any, oracle: any, market: any) {
   }
 }
 
-async function liquidateUnderwater(market: any) {
+async function liquidateUnderwater(oracle: any, market: any, keeperSigner: any) {
   const count: bigint = await market.openPositionCount();
   const PAGE = 100n;
   for (let offset = 0n; offset < count; offset += PAGE) {
@@ -180,14 +180,36 @@ async function liquidateUnderwater(market: any) {
       if (!flags[i]) continue;
       const m = metas[i];
       try {
-        const tx = await market.liquidate(m.owner, m.marketId, m.isLong);
-        await tx.wait();
+        // Bundle a fresh keeper-signed price with the liquidation so gap moves
+        // are caught immediately (minimal bad debt) without a separate post.
+        const sym = ethers.decodeBytes32String(m.marketId) as Sym;
+        const cex = latestPrices?.[sym];
+        if (cex && cex > 0) {
+          const ts = Math.floor(Date.now() / 1000);
+          const price = toWei(cex);
+          const sig = await signPrice(oracle, keeperSigner, m.marketId, price, ts);
+          const tx = await market.liquidateWithSignedPrice(m.owner, m.marketId, m.isLong, price, ts, sig);
+          await tx.wait();
+        } else {
+          const tx = await market.liquidate(m.owner, m.marketId, m.isLong);
+          await tx.wait();
+        }
         console.log(`[${now()}] liquidated ${m.owner} ${ethers.decodeBytes32String(m.marketId)} ${m.isLong ? "long" : "short"}`);
       } catch (e: any) {
         console.error(`[${now()}] liquidate failed: ${e.message ?? e}`);
       }
     }
   }
+}
+
+// EIP-712 sign a fresh price with the keeper key (for signed-price liquidation)
+async function signPrice(oracle: any, signer: any, marketId: string, price: bigint, timestamp: number): Promise<string> {
+  const net = await ethers.provider.getNetwork();
+  const domain = { name: "XKubPriceOracle", version: "1", chainId: net.chainId, verifyingContract: await oracle.getAddress() };
+  const types = { Price: [
+    { name: "marketId", type: "bytes32" }, { name: "price", type: "uint256" }, { name: "timestamp", type: "uint256" },
+  ] };
+  return signer.signTypedData(domain, types, { marketId, price, timestamp });
 }
 
 // ─── Gasless relayer (HTTP) ────────────────────────────────────────────────────
@@ -270,7 +292,7 @@ async function main() {
     try { await executeTriggers(router, oracle, market); }
     catch (e: any) { console.error(`[${now()}] trigger round failed: ${e.message ?? e}`); }
 
-    try { await liquidateUnderwater(market); }
+    try { await liquidateUnderwater(oracle, market, keeper); }
     catch (e: any) { console.error(`[${now()}] liquidation round failed: ${e.message ?? e}`); }
 
     await new Promise((r) => setTimeout(r, INTERVAL_MS));

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+
 /*//////////////////////////////////////////////////////////////
                 XKub Perp: Keeper-Posted Price Oracle
 //////////////////////////////////////////////////////////////
@@ -26,7 +29,9 @@ pragma solidity ^0.8.24;
   Prices are USD scaled to 1e18.
 */
 
-contract XKubPriceOracle {
+contract XKubPriceOracle is EIP712 {
+    using ECDSA for bytes32;
+
     struct PriceData {
         uint192 price;      // USD, 1e18
         uint64  timestamp;  // block.timestamp of last update
@@ -39,10 +44,19 @@ contract XKubPriceOracle {
     // Max move allowed per keeper update (bps). 500 = 5%.
     uint256 public maxDeviationBps = 500;
 
+    // Pull/signed prices: a keeper signs (marketId, price, timestamp) off-chain;
+    // anyone may submit it (e.g. a liquidator bundling a fresh price with a
+    // liquidation). Signed prices allow a larger single move so real gap moves
+    // update immediately, and must be recent.
+    bytes32 public constant PRICE_TYPEHASH = keccak256("Price(bytes32 marketId,uint256 price,uint256 timestamp)");
+    uint256 public maxSignedDeviationBps = 2000; // 20% — bounds a compromised keeper, still passes real gaps
+    uint256 public maxSignedAge = 30;            // signed price must be ≤30s old
+
     event PriceUpdated(bytes32 indexed marketId, uint256 price, address indexed keeper);
     event PriceForced(bytes32 indexed marketId, uint256 price);
     event KeeperSet(address indexed keeper, bool allowed);
     event MaxDeviationUpdated(uint256 bps);
+    event SignedPriceParamsUpdated(uint256 maxSignedDeviationBps, uint256 maxSignedAge);
     event AdminChanged(address indexed oldAdmin, address indexed newAdmin);
 
     modifier onlyAdmin() {
@@ -55,8 +69,34 @@ contract XKubPriceOracle {
         _;
     }
 
-    constructor(address _admin) {
+    constructor(address _admin) EIP712("XKubPriceOracle", "1") {
         admin = _admin == address(0) ? msg.sender : _admin;
+    }
+
+    // ─── Signed (pull) prices ──────────────────────────────────────────────────
+
+    /// @notice Digest a keeper signs off-chain for a pull-price update.
+    function hashPrice(bytes32 marketId, uint256 price, uint256 timestamp) public view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(PRICE_TYPEHASH, marketId, price, timestamp)));
+    }
+
+    /// @notice Apply a keeper-signed fresh price. Permissionless — the signature
+    ///         is the authorisation. Used to bundle a fresh price with a
+    ///         liquidation/execution so it's always current.
+    function applySignedPrice(bytes32 marketId, uint256 price, uint256 timestamp, bytes calldata sig) public {
+        require(price > 0 && price <= type(uint192).max, "bad price");
+        require(timestamp <= block.timestamp && block.timestamp - timestamp <= maxSignedAge, "stale sig");
+        require(timestamp >= prices[marketId].timestamp, "older than stored");
+        address signer = ECDSA.recover(hashPrice(marketId, price, timestamp), sig);
+        require(isKeeper[signer], "!keeper sig");
+
+        uint256 last = prices[marketId].price;
+        if (last != 0) {
+            uint256 diffBps = price > last ? ((price - last) * 10000) / last : ((last - price) * 10000) / last;
+            require(diffBps <= maxSignedDeviationBps, "signed deviation too high");
+        }
+        prices[marketId] = PriceData(uint192(price), uint64(timestamp));
+        emit PriceUpdated(marketId, price, signer);
     }
 
     // ─── Keeper Price Posts ────────────────────────────────────────────────────
@@ -117,6 +157,14 @@ contract XKubPriceOracle {
         require(bps >= 10 && bps <= 5000, "10bps-50%");
         maxDeviationBps = bps;
         emit MaxDeviationUpdated(bps);
+    }
+
+    function setSignedPriceParams(uint256 devBps, uint256 age) external onlyAdmin {
+        require(devBps >= 100 && devBps <= 5000, "1%-50%");
+        require(age >= 5 && age <= 300, "5s-5m");
+        maxSignedDeviationBps = devBps;
+        maxSignedAge = age;
+        emit SignedPriceParamsUpdated(devBps, age);
     }
 
     function setAdmin(address _admin) external onlyAdmin {

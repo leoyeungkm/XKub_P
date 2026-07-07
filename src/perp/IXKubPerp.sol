@@ -8,6 +8,7 @@ pragma solidity ^0.8.24;
 interface IXKubPriceOracle {
     function getPrice(bytes32 marketId, uint256 maxAge) external view returns (uint256);
     function peekPrice(bytes32 marketId) external view returns (uint256 price, uint256 updatedAt);
+    function applySignedPrice(bytes32 marketId, uint256 price, uint256 timestamp, bytes calldata sig) external;
 }
 
 interface IXKubPerpPool {

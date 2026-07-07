@@ -27,28 +27,47 @@ export function useCexPrices() {
   });
 }
 
-// ─── Shared Binance WebSocket (BTC/ETH real-time) ─────────────────────────────
-const WS_SYMBOLS: Record<string, string> = { BTCUSDT: "BTC", ETHUSDT: "ETH" };
+// ─── Shared Bitkub WebSocket (BTC/ETH real-time, THB→USD) ─────────────────────
+// One connection subscribes to all three tickers; Bitkub quotes in THB, so we
+// divide BTC_THB / ETH_THB by USDT_THB to get USD.
+const WS_URL =
+  "wss://api.bitkub.com/websocket-api/market.ticker.thb_btc,market.ticker.thb_eth,market.ticker.thb_usdt";
+const STREAM_SYM: Record<string, string> = {
+  "market.ticker.thb_btc": "BTC",
+  "market.ticker.thb_eth": "ETH",
+  "market.ticker.thb_usdt": "USDT",
+};
 let ws: WebSocket | null = null;
 let started = false;
-let wsPrices: Record<string, number> = {};
+let thb: Record<string, number> = {};      // BTC/ETH/USDT last, in THB
+let wsPrices: Record<string, number> = {}; // BTC/ETH in USD
 const subs = new Set<() => void>();
 const EMPTY: Record<string, number> = {};
+
+function recompute() {
+  const usdt = thb.USDT;
+  if (!(usdt > 0)) return; // no USD conversion yet
+  const next: Record<string, number> = {};
+  if (thb.BTC > 0) next.BTC = thb.BTC / usdt;
+  if (thb.ETH > 0) next.ETH = thb.ETH / usdt;
+  if (next.BTC !== wsPrices.BTC || next.ETH !== wsPrices.ETH) {
+    wsPrices = next;
+    subs.forEach((f) => f());
+  }
+}
 
 function connect() {
   if (typeof window === "undefined") return;
   try {
-    ws = new WebSocket(
-      "wss://stream.binance.com:9443/stream?streams=btcusdt@miniTicker/ethusdt@miniTicker",
-    );
+    ws = new WebSocket(WS_URL);
     ws.onmessage = (e) => {
       try {
-        const d = JSON.parse(e.data)?.data;
-        const sym = d && WS_SYMBOLS[d.s];
-        const px = d && Number(d.c); // miniTicker close = last price
-        if (sym && px > 0 && px !== wsPrices[sym]) {
-          wsPrices = { ...wsPrices, [sym]: px };
-          subs.forEach((f) => f());
+        const d = JSON.parse(e.data);
+        const sym = d?.stream && STREAM_SYM[d.stream];
+        const last = Number(d?.last);
+        if (sym && last > 0 && thb[sym] !== last) {
+          thb = { ...thb, [sym]: last };
+          recompute();
         }
       } catch { /* ignore malformed frame */ }
     };
@@ -63,8 +82,8 @@ function ensureWs() {
   connect();
 }
 
-/** Real-time BTC/ETH from Binance WS (empty until the first tick arrives). */
-export function useBinanceLive(): Record<string, number> {
+/** Real-time BTC/ETH (USD) from the Bitkub WS (empty until the first ticks arrive). */
+export function useCexWs(): Record<string, number> {
   return useSyncExternalStore(
     (cb) => { ensureWs(); subs.add(cb); return () => subs.delete(cb); },
     () => wsPrices,
@@ -75,7 +94,7 @@ export function useBinanceLive(): Record<string, number> {
 /** Merged live prices: WS overrides REST for BTC/ETH; KUB comes from the relayer. */
 export function useLivePrices(): Record<string, number> {
   const { data: rest } = useCexPrices();
-  const live = useBinanceLive();
+  const live = useCexWs();
   return { ...(rest ?? EMPTY), ...live };
 }
 

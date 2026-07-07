@@ -43,23 +43,48 @@ async function fetchJson(url: string): Promise<any> {
   return res.json();
 }
 
+// Median of the valid (>0) samples — resistant to any single exchange being
+// down, stale, or manipulated. Even count → mean of the two middle values.
+function median(xs: number[]): number {
+  const a = xs.filter((x) => x > 0 && Number.isFinite(x)).sort((p, q) => p - q);
+  if (!a.length) return NaN;
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+
+// Fetch one number from a URL, returning NaN on any failure so one bad source
+// never sinks the whole round.
+async function pick(url: string, get: (j: any) => number): Promise<number> {
+  try { return get(await fetchJson(url)); } catch { return NaN; }
+}
+
 async function fetchPrices(): Promise<Record<Sym, number>> {
-  // Bitkub v3 ticker: sym is BASE_QUOTE (e.g. KUB_THB), returns an array of
-  // one object with string-encoded numbers.
-  const [btc, eth, kubThb, usdtThb] = await Promise.all([
-    fetchJson("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"),
-    fetchJson("https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT"),
-    fetchJson("https://api.bitkub.com/api/v3/market/ticker?sym=KUB_THB"),
-    fetchJson("https://api.bitkub.com/api/v3/market/ticker?sym=USDT_THB"),
+  // BTC/ETH: median across deep global venues + Bitkub (manipulation-resistant).
+  // KUB: only trades on Bitkub, so it's inherently single-source.
+  const [
+    bnB, bnE, okxB, okxE, bybitB, bybitE, bkB, bkE, kubThb, usdtThb,
+  ] = await Promise.all([
+    pick("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT", (j) => Number(j.price)),
+    pick("https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT", (j) => Number(j.price)),
+    pick("https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT", (j) => Number(j?.data?.[0]?.last)),
+    pick("https://www.okx.com/api/v5/market/ticker?instId=ETH-USDT", (j) => Number(j?.data?.[0]?.last)),
+    pick("https://api.bybit.com/v5/market/tickers?category=spot&symbol=BTCUSDT", (j) => Number(j?.result?.list?.[0]?.lastPrice)),
+    pick("https://api.bybit.com/v5/market/tickers?category=spot&symbol=ETHUSDT", (j) => Number(j?.result?.list?.[0]?.lastPrice)),
+    pick("https://api.bitkub.com/api/v3/market/ticker?sym=BTC_THB", (j) => Number(j?.[0]?.last)),
+    pick("https://api.bitkub.com/api/v3/market/ticker?sym=ETH_THB", (j) => Number(j?.[0]?.last)),
+    pick("https://api.bitkub.com/api/v3/market/ticker?sym=KUB_THB", (j) => Number(j?.[0]?.last)),
+    pick("https://api.bitkub.com/api/v3/market/ticker?sym=USDT_THB", (j) => Number(j?.[0]?.last)),
   ]);
-  const kubLast = Number(kubThb?.[0]?.last);
-  const usdtLast = Number(usdtThb?.[0]?.last);
-  if (!(kubLast > 0) || !(usdtLast > 0)) throw new Error("Bitkub ticker: bad response");
-  return {
-    BTC: Number(btc.price),
-    ETH: Number(eth.price),
-    KUB: kubLast / usdtLast,
-  };
+  // Convert Bitkub THB quotes to USD via USDT_THB.
+  const usdt = usdtThb; // THB per USDT
+  const bkBtcUsd = usdt > 0 ? bkB / usdt : NaN;
+  const bkEthUsd = usdt > 0 ? bkE / usdt : NaN;
+
+  const BTC = median([bnB, okxB, bybitB, bkBtcUsd]);
+  const ETH = median([bnE, okxE, bybitE, bkEthUsd]);
+  const KUB = usdt > 0 ? kubThb / usdt : NaN;
+  if (!(BTC > 0) || !(ETH > 0) || !(KUB > 0)) throw new Error("price sources: no valid quotes");
+  return { BTC, ETH, KUB };
 }
 
 /** Clamp target into the oracle's allowed deviation band around last. */

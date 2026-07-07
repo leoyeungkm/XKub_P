@@ -298,6 +298,15 @@ async function main() {
 
   startRelayer(router, oracle, maxDeviationBps); // gasless: accept agent-signed orders over HTTP
 
+  // Fast off-chain price refresh (no gas): keeps latestPrices — hence /prices and
+  // the UI's live mark/PnL — moving every few seconds, independent of the slower
+  // on-chain posting loop below.
+  const refreshTicker = async () => {
+    try { latestPrices = await fetchPrices(); } catch { /* transient CEX blip */ }
+  };
+  await refreshTicker();
+  setInterval(refreshTicker, 5000);
+
   // eslint-disable-next-line no-constant-condition
   while (true) {
     try { await maybePushPrices(oracle, router, market, maxDeviationBps); }

@@ -3,11 +3,17 @@
 // Aggregates a trader's account: balances, open positions, unrealized PnL,
 // and (from event logs) realized PnL + trade/funding history.
 import { useQuery } from "@tanstack/react-query";
+import { parseEther } from "viem";
 import { useAccount, usePublicClient, useReadContract, useReadContracts } from "wagmi";
 import {
   ADDR, E18, MARKETS, b32, parseB32, erc20Abi, marketAbi, oracleAbi, poolAbi,
   routerAbi, marketEventsAbi, routerEventsAbi, tokenToUsd,
 } from "@/config/contracts";
+import { useCexPrices } from "./cexPrice";
+
+const toE18 = (n: number): bigint => {
+  try { return parseEther(n.toFixed(6)); } catch { return 0n; }
+};
 
 const COMBOS = MARKETS.flatMap((m) => [
   { symbol: m.symbol, isLong: true },
@@ -21,6 +27,7 @@ export type PositionRow = {
 
 export function usePositions() {
   const { address } = useAccount();
+  const { data: cex } = useCexPrices(); // live CEX (Binance/Bitkub), refreshes every few seconds
   const { data } = useReadContracts({
     contracts: COMBOS.flatMap((c) => [
       { address: ADDR.market, abi: marketAbi, functionName: "getPosition", args: [address!, b32(c.symbol), c.isLong] },
@@ -32,13 +39,30 @@ export function usePositions() {
 
   const rows: PositionRow[] = COMBOS.map((c, i) => {
     const pos = data?.[i * 3]?.result as { sizeUsd: bigint; sizeTokens: bigint; collateralUsd: bigint } | undefined;
-    const pnl = (data?.[i * 3 + 1]?.result as bigint | undefined) ?? 0n;
+    const chainPnl = (data?.[i * 3 + 1]?.result as bigint | undefined) ?? 0n;
     const peek = data?.[i * 3 + 2]?.result as readonly [bigint, bigint] | undefined;
     if (!pos || pos.sizeUsd === 0n) return null;
+
+    const oracleMark = peek?.[0] ?? 0n;
+    // Display the live CEX price so the mark & PnL move in real time — the
+    // keeper only posts the oracle conditionally, so peekPrice can be stale.
+    // Keep the on-chain PnL (which includes accrued borrow fees) as the base and
+    // overlay only the price delta since the last oracle post.
+    const live = cex?.[c.symbol];
+    const liveMark = live && live > 0 ? toE18(live) : 0n;
+    let mark = oracleMark, pnl = chainPnl;
+    if (liveMark > 0n && oracleMark > 0n) {
+      const priceAdj = (pos.sizeTokens * (liveMark - oracleMark)) / E18; // signed USD 1e18
+      pnl = chainPnl + (c.isLong ? priceAdj : -priceAdj);
+      mark = liveMark;
+    } else if (liveMark > 0n) {
+      mark = liveMark;
+    }
+
     return {
       symbol: c.symbol, isLong: c.isLong, sizeUsd: pos.sizeUsd, sizeTokens: pos.sizeTokens,
       collateralUsd: pos.collateralUsd,
-      entry: (pos.sizeUsd * E18) / pos.sizeTokens, mark: peek?.[0] ?? 0n, pnl,
+      entry: (pos.sizeUsd * E18) / pos.sizeTokens, mark, pnl,
     };
   }).filter(Boolean) as PositionRow[];
 

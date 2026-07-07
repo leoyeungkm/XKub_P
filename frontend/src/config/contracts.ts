@@ -66,6 +66,7 @@ export const marketAbi = parseAbi([
   "function effectiveTier(address trader) view returns (uint8)",
   "function userVolumeUsd(address trader) view returns (uint256)",
   "function weightedVolumeUsd(address trader) view returns (uint256)",
+  "function totalOpenInterestUsd() view returns (uint256)",
   "function maintenanceMarginBps() view returns (uint256)",
   "function rapidCloseFeeBps() view returns (uint256)",
   "function rapidCloseWindow() view returns (uint256)",
@@ -117,6 +118,10 @@ export const poolAbi = parseAbi([
   "function poolValueUsd() view returns (uint256)",
   "function sharePriceUsd() view returns (uint256)",
   "function balanceOf(address) view returns (uint256)",
+  "function totalSupply() view returns (uint256)",
+  "function reserveFactorBps() view returns (uint256)",
+  "function withdrawCooldown() view returns (uint256)",
+  "function lastDepositAt(address) view returns (uint256)",
 ]);
 
 export const erc20Abi = parseAbi([

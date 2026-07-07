@@ -7,7 +7,6 @@ import TradePanel from "@/components/TradePanel";
 import OneClickPanel from "@/components/OneClickPanel";
 import ActivityPanel from "@/components/ActivityPanel";
 import ResizableColumn from "@/components/ResizableColumn";
-import EarnPanel from "@/components/EarnPanel";
 import { MARKETS } from "@/config/contracts";
 
 export default function Home() {
@@ -24,7 +23,6 @@ export default function Home() {
         <div className="flex flex-col gap-2">
           <TradePanel symbol={market} />
           <OneClickPanel />
-          <EarnPanel />
         </div>
       </main>
     </>

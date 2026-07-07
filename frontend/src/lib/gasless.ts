@@ -38,11 +38,14 @@ export async function submitGaslessOrder(params: {
   const agent = getAgentAccount(params.owner);
   if (!agent) throw new Error("no agent key");
 
-  const nonce = await params.client.readContract({
-    address: ADDR.router, abi: routerAbi, functionName: "orderNonce", args: [params.owner],
-  });
   // Deadline must be relative to CHAIN time (client and chain clocks can differ).
-  const block = await params.client.getBlock();
+  // Fetch nonce + block in parallel to shave a round-trip off the sign latency.
+  const [nonce, block] = await Promise.all([
+    params.client.readContract({
+      address: ADDR.router, abi: routerAbi, functionName: "orderNonce", args: [params.owner],
+    }),
+    params.client.getBlock(),
+  ]);
   const deadline = block.timestamp + 300n;
 
   const message = {

@@ -244,6 +244,10 @@ async function signPrice(oracle: any, signer: any, marketId: string, price: bigi
 // posts conditionally (idle → no post), so the on-chain price can be stale when
 // a gasless order arrives; without this, executeSignedOrder reverts "stale price".
 async function postFreshPrice(oracle: any, marketId: string, maxDeviationBps: bigint) {
+  // Always post a fresh price right before execution — this is the anti-arbitrage
+  // guarantee (execution-time pricing). We never let an order execute against a
+  // lagging on-chain price, even a small lag, because that lag IS the edge a timer
+  // would extract from the LP pool.
   const prices = latestPrices ?? await fetchPrices();
   latestPrices = prices;
   const sym = ethers.decodeBytes32String(marketId) as Sym;
@@ -283,13 +287,17 @@ function startRelayer(router: any, oracle: any, maxDeviationBps: bigint) {
         if (submitted.has(key)) { res.writeHead(409); return res.end(JSON.stringify({ error: "duplicate" })); }
         submitted.add(key); // in-flight guard; the on-chain nonce is the real replay protection
         try {
-          // Refresh the oracle for this market so execution doesn't hit "stale price".
+          // Refresh the oracle for this market so execution doesn't hit "stale
+          // price" (skipped internally when the price is already fresh).
           await postFreshPrice(oracle, o.marketId, maxDeviationBps);
+          // Sending awaits the pre-flight gas estimation (which reverts on stale/
+          // slippage/bad-sig), so returning the hash now — without waiting for the
+          // block — is safe and cuts perceived latency by a full block.
           const tx = await router.executeSignedOrder(o, sig);
-          const rcpt = await tx.wait();
-          console.log(`[${now()}] relayed ${o.isIncrease ? "open" : "close"} for ${o.owner} #${o.nonce}`);
+          console.log(`[${now()}] relayed ${o.isIncrease ? "open" : "close"} for ${o.owner} #${o.nonce} (${tx.hash})`);
           res.writeHead(200, { "content-type": "application/json" });
-          res.end(JSON.stringify({ ok: true, txHash: rcpt.hash }));
+          res.end(JSON.stringify({ ok: true, txHash: tx.hash }));
+          tx.wait().catch(() => submitted.delete(key)); // if it reverts on-chain, allow a retry
         } catch (err) {
           submitted.delete(key); // failed → allow retry
           throw err;

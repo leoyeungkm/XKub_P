@@ -92,3 +92,15 @@ export const erc20Abi = parseAbi([
   "function approve(address spender, uint256 amount) returns (bool)",
   "function mint(address to, uint256 amount)",
 ]);
+
+// Event ABIs for portfolio history (getLogs)
+export const marketEventsAbi = parseAbi([
+  "event PositionIncreased(address indexed owner, bytes32 indexed marketId, bool isLong, uint256 collateralDeltaUsd, uint256 sizeDeltaUsd, uint256 price, uint256 feeUsd)",
+  "event PositionDecreased(address indexed owner, bytes32 indexed marketId, bool isLong, uint256 sizeDeltaUsd, uint256 price, int256 pnlUsd, uint256 payoutUsd, uint256 feeUsd)",
+  "event PositionLiquidated(address indexed owner, bytes32 indexed marketId, bool isLong, address indexed liquidator, uint256 price, uint256 keeperRewardUsd, uint256 traderRefundUsd, uint256 toPoolUsd)",
+]);
+
+export const routerEventsAbi = parseAbi([
+  "event CollateralDeposited(address indexed owner, uint256 tokens)",
+  "event CollateralWithdrawn(address indexed owner, uint256 tokens)",
+]);

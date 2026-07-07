@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/Providers";
+import Header from "@/components/Header";
+import OnboardingModal from "@/components/OnboardingModal";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -29,7 +31,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${plexMono.variable}`}>
       <body className="min-h-screen antialiased">
-        <Providers>{children}</Providers>
+        <Providers>
+          <Header />
+          {children}
+          <OnboardingModal />
+        </Providers>
       </body>
     </html>
   );

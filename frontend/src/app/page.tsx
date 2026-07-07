@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Header from "@/components/Header";
 import MarketBar from "@/components/MarketBar";
 import Chart from "@/components/Chart";
 import TradePanel from "@/components/TradePanel";
@@ -16,9 +15,8 @@ export default function Home() {
 
   return (
     <>
-      <Header />
       <MarketBar current={market} onChange={setMarket} />
-      <main className="mx-auto grid max-w-[1560px] grid-cols-1 gap-2.5 p-2.5 lg:grid-cols-[1fr_320px]">
+      <main className="grid grid-cols-1 gap-2.5 p-2.5 xl:grid-cols-[1fr_340px]">
         <div className="flex min-w-0 flex-col gap-2.5">
           <Chart symbol={market} />
           <PositionsTable />

@@ -4,6 +4,8 @@ import {
   useAccount, useBalance, useConnect, useDisconnect, useReadContract,
   useWriteContract, usePublicClient,
 } from "wagmi";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import toast from "react-hot-toast";
 import { ADDR, CFG, chain, erc20Abi, tokenToUsd, usdToToken } from "@/config/contracts";
 import { shortAddr, errMsg, fmtUsd } from "@/lib/format";
@@ -17,6 +19,7 @@ export default function Header() {
   const { disconnect } = useDisconnect();
   const { writeContractAsync } = useWriteContract();
   const client = usePublicClient();
+  const pathname = usePathname();
 
   const { data: kubBal } = useBalance({
     address,
@@ -57,7 +60,11 @@ export default function Header() {
         <span className="grid h-6 w-6 place-items-center rounded-md bg-accent text-[13px] font-bold text-bg">X</span>
         Kub<span className="text-muted">Perp</span>
       </div>
-      <div className="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[10.5px] text-muted sm:flex">
+      <nav className="flex items-center gap-0.5 text-[13px]">
+        <NavLink href="/" label="Trade" active={pathname === "/"} />
+        <NavLink href="/portfolio" label="Portfolio" active={pathname === "/portfolio"} />
+      </nav>
+      <div className="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[10.5px] text-muted lg:flex">
         <span className="h-1.5 w-1.5 rounded-full bg-green" />
         {CFG.chainName}
       </div>
@@ -104,5 +111,18 @@ export default function Header() {
         </button>
       )}
     </header>
+  );
+}
+
+function NavLink({ href, label, active }: { href: string; label: string; active: boolean }) {
+  return (
+    <Link
+      href={href}
+      className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
+        active ? "bg-panel2 text-fg" : "text-muted hover:text-fg"
+      }`}
+    >
+      {label}
+    </Link>
   );
 }

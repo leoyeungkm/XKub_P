@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatEther } from "viem";
-import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import toast from "react-hot-toast";
-import { ADDR, b32, parseB32, routerAbi } from "@/config/contracts";
+import { ADDR, b32, parseB32, routerAbi, triggerKey } from "@/config/contracts";
 import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
 import { usePositions, useHistory, type PositionRow, type HistoryItem } from "@/lib/portfolio";
@@ -101,7 +101,22 @@ export default function ActivityPanel() {
 const HEAD = ["幣種", "數量", "方向", "倉位價值", "開倉價格", "當前價格", "初始保證金", "倉位盈虧 (回報率)", "預估強平價", "止盈/止損", ""];
 
 function PositionsView({ rows, onClose }: { rows: PositionRow[]; onClose: (p: PositionRow) => void }) {
+  const { address } = useAccount();
   const [tpsl, setTpsl] = useState<PositionRow | null>(null);
+
+  // Read each position's TP/SL trigger
+  const { data: trigData } = useReadContracts({
+    contracts: address ? rows.map((r) => ({
+      address: ADDR.router, abi: routerAbi, functionName: "triggers",
+      args: [triggerKey(address, r.symbol, r.isLong)],
+    })) as never[] : [],
+    query: { enabled: !!address && rows.length > 0, refetchInterval: 6000 },
+  });
+  const trigOf = (i: number) => {
+    const t = trigData?.[i]?.result as readonly [bigint, bigint, bigint, boolean] | undefined;
+    return t && t[3] ? { tp: t[0], sl: t[1] } : null;
+  };
+
   if (rows.length === 0) return <Empty>No open positions</Empty>;
   return (
     <div className="overflow-x-auto">
@@ -113,7 +128,8 @@ function PositionsView({ rows, onClose }: { rows: PositionRow[]; onClose: (p: Po
           </tr>
         </thead>
         <tbody>
-          {rows.map((p) => {
+          {rows.map((p, i) => {
+            const trig = trigOf(i);
             const lev = p.collateralUsd > 0n ? Number(p.sizeUsd) / Number(p.collateralUsd) : 0;
             const retPct = p.collateralUsd > 0n ? (Number(p.pnl) / Number(p.collateralUsd)) * 100 : 0;
             const move = 1 / lev - 0.01;
@@ -141,9 +157,20 @@ function PositionsView({ rows, onClose }: { rows: PositionRow[]; onClose: (p: Po
                 </td>
                 <td className="tnum px-3 py-2.5">{lev > 1 ? `$${fmtNum(liq, liq >= 100 ? 1 : 4)}` : "—"}</td>
                 <td className="px-3 py-2.5">
-                  <button onClick={() => setTpsl(p)} className="rounded border border-line px-2 py-1 text-[11px] text-muted transition-colors hover:border-accent/50 hover:text-accent">
-                    設定 TP/SL
-                  </button>
+                  {trig ? (
+                    <button onClick={() => setTpsl(p)} className="flex flex-col gap-0.5 text-left transition-opacity hover:opacity-80" title="編輯 TP/SL">
+                      <span className="tnum text-[11px] text-green">
+                        TP {trig.tp > 0n ? `$${fmtPrice(trig.tp)}` : "—"}
+                      </span>
+                      <span className="tnum text-[11px] text-red">
+                        SL {trig.sl > 0n ? `$${fmtPrice(trig.sl)}` : "—"}
+                      </span>
+                    </button>
+                  ) : (
+                    <button onClick={() => setTpsl(p)} className="rounded border border-line px-2 py-1 text-[11px] text-muted transition-colors hover:border-accent/50 hover:text-accent">
+                      設定 TP/SL
+                    </button>
+                  )}
                 </td>
                 <td className="px-3 py-2.5 text-right">
                   <button onClick={() => onClose(p)} className="rounded border border-line px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-red/50 hover:text-red">

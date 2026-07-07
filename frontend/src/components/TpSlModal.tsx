@@ -41,8 +41,8 @@ export default function TpSlModal({ pos, onClose }: { pos: PositionRow; onClose:
     if (!existing) return;
     const [tpP, slP,, active] = existing as readonly [bigint, bigint, bigint, boolean];
     if (active) {
-      if (tpP > 0n) setTp(fmtPrice(tpP));
-      if (slP > 0n) setSl(fmtPrice(slP));
+      if (tpP > 0n) setTp(String(Number(formatEther(tpP))));
+      if (slP > 0n) setSl(String(Number(formatEther(slP))));
     }
   }, [existing]);
 
@@ -50,6 +50,8 @@ export default function TpSlModal({ pos, onClose }: { pos: PositionRow; onClose:
   const pnlAt = (target: number) =>
     target > 0 ? sizeUsd * (pos.isLong ? target / entry - 1 : 1 - target / entry) : 0;
 
+  // Plain numeric string (no thousands separators — a number input rejects commas)
+  const priceStr = (n: number) => String(Number(n.toFixed(n >= 100 ? 2 : 5)));
   const tpPrice = (pct: number) => entry * (1 + (pos.isLong ? 1 : -1) * (pct / 100) / lev);
   const slPrice = (pct: number) => entry * (1 - (pos.isLong ? 1 : -1) * (pct / 100) / lev);
 
@@ -158,7 +160,7 @@ export default function TpSlModal({ pos, onClose }: { pos: PositionRow; onClose:
             </div>
             <div className="grid grid-cols-5 gap-1">
               {TP_PRESETS.map((p) => (
-                <button key={p} onClick={() => setTp(fmtNum(tpPrice(p), tpPrice(p) >= 100 ? 2 : 5))}
+                <button key={p} onClick={() => setTp(priceStr(tpPrice(p)))}
                   className="tnum rounded bg-panel2 py-1.5 text-[11px] text-muted transition-colors hover:text-green">
                   {p}%
                 </button>
@@ -182,7 +184,7 @@ export default function TpSlModal({ pos, onClose }: { pos: PositionRow; onClose:
             </div>
             <div className="grid grid-cols-5 gap-1">
               {SL_PRESETS.map((p) => (
-                <button key={p} onClick={() => setSl(fmtNum(slPrice(p), slPrice(p) >= 100 ? 2 : 5))}
+                <button key={p} onClick={() => setSl(priceStr(slPrice(p)))}
                   className="tnum rounded bg-panel2 py-1.5 text-[11px] text-muted transition-colors hover:text-red">
                   {p}%
                 </button>

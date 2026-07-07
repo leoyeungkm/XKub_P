@@ -251,22 +251,22 @@ async function initPricesToReal(oracle: any, maxDeviationBps: bigint) {
   const prices = await fetchPrices();
   latestPrices = prices;
   for (let iter = 0; iter < 25; iter++) {
-    const ids: string[] = [];
-    const vals: bigint[] = [];
     let done = true;
+    // Per-market so one market (or a transient revert) never blocks the others.
     for (const sym of MARKETS) {
       const id = ethers.encodeBytes32String(sym);
       const [last] = await oracle.peekPrice(id);
       const cex = toWei(prices[sym]);
+      const diffBps = last > 0n ? ((cex > last ? cex - last : last - cex) * 10000n) / last : 10000n;
+      if (diffBps <= 30n) continue; // already fresh
+      done = false;
       const v = step(last, cex, maxDeviationBps);
-      if (last === 0n || ((cex > last ? cex - last : last - cex) * 10000n) / last > 50n) done = false;
-      ids.push(id);
-      vals.push(v);
+      try { await (await oracle.setPrices([id], [v])).wait(); }
+      catch { /* transient; retry next iteration */ }
     }
-    await (await oracle.setPrices(ids, vals)).wait();
     if (done) break;
   }
-  console.log(`[${now()}] oracle initialised to real prices: ` +
+  console.log(`[${now()}] oracle prices initialised: ` +
     MARKETS.map((s) => `${s}=$${Number(prices[s]).toFixed(s === "KUB" ? 4 : 0)}`).join(" "));
 }
 
@@ -362,7 +362,9 @@ async function main() {
   // A fresh deployment seeds the oracle with placeholder prices; walk them to the
   // real value on startup (each step ≤ maxDeviationBps) so the first order isn't
   // rejected for "signed deviation too high". Self-heals every (re)deploy.
-  await initPricesToReal(oracle, maxDeviationBps);
+  // Non-fatal: if prices are already fresh a step can be a no-op/revert; keep going.
+  try { await initPricesToReal(oracle, maxDeviationBps); }
+  catch (e: any) { console.error(`[${now()}] initPrices skipped: ${e.shortMessage ?? e.message ?? e}`); }
 
   startRelayer(router, oracle, maxDeviationBps, keeper); // gasless: accept agent-signed orders over HTTP
 

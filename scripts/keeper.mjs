@@ -138,27 +138,35 @@ const DEVIATION_BPS = 20;
 const HEARTBEAT_MS = 60000;
 let lastPostAt = 0;
 
-async function maybePushPrices(oracle, router, market, maxDeviationBps) {
+// Post prices ONLY while two-step requests are pending (they execute at the
+// on-chain price). Open positions alone need NO routine posting: liquidations
+// bundle a keeper-signed fresh price, and TP/SL triggers pre-post on demand —
+// so a lone idle position no longer burns a heartbeat post every minute.
+async function maybePushPrices(oracle, router, maxDeviationBps) {
   const prices = await fetchPrices();
   latestPrices = prices;
   const hasPending = (await router.getPendingRequests(1)).length > 0;
-  const hasPositions = (await market.openPositionCount()) > 0n;
-  if (!hasPending && !hasPositions) { console.log(`[${now()}] idle — no on-chain post (0 gas)`); return; }
+  if (!hasPending) { console.log(`[${now()}] idle — no on-chain post (0 gas)`); return; }
 
   const ids = [], values = [];
-  let deviated = false;
   for (const sym of MARKETS) {
     const id = ethers.encodeBytes32String(sym);
     const [last] = await oracle.peekPrice(id);
-    const cex = toWei(prices[sym]);
-    if (last === 0n || (last > 0n && ((cex > last ? cex - last : last - cex) * 10000n) / last >= BigInt(DEVIATION_BPS))) deviated = true;
-    ids.push(id); values.push(step(last, cex, maxDeviationBps));
+    ids.push(id); values.push(step(last, toWei(prices[sym]), maxDeviationBps));
   }
-  const heartbeat = Date.now() - lastPostAt >= HEARTBEAT_MS;
-  if (!hasPending && !deviated && !heartbeat) return;
   await (await sendLocked(() => oracle.setPrices(ids, values, TX()))).wait();
   lastPostAt = Date.now();
-  console.log(`[${now()}] prices: ` + MARKETS.map((s, i) => `${s}=$${Number(ethers.formatEther(values[i])).toFixed(s === "KUB" ? 4 : 0)}`).join(" "));
+  console.log(`[${now()}] prices (pending orders): ` + MARKETS.map((s, i) => `${s}=$${Number(ethers.formatEther(values[i])).toFixed(s === "KUB" ? 4 : 0)}`).join(" "));
+}
+
+// Single-market post right before an on-demand execution (TP/SL trigger).
+async function postMarketPrice(oracle, marketId, maxDeviationBps) {
+  const prices = latestPrices ?? await fetchPrices();
+  latestPrices = prices;
+  const sym = ethers.decodeBytes32String(marketId);
+  const [last] = await oracle.peekPrice(marketId);
+  const value = step(last, toWei(prices[sym]), maxDeviationBps);
+  await (await sendLocked(() => oracle.setPrices([marketId], [value], TX()))).wait();
 }
 
 async function executePending(router) {
@@ -169,7 +177,9 @@ async function executePending(router) {
   }
 }
 
-async function executeTriggers(router, oracle, market) {
+// TP/SL: judge against the LIVE CEX price off-chain (free); only when a trigger
+// looks hit, post that market's price and execute — no routine posting needed.
+async function executeTriggers(router, oracle, market, maxDeviationBps) {
   const count = await market.openPositionCount();
   const PAGE = 100n;
   for (let offset = 0n; offset < count; offset += PAGE) {
@@ -179,37 +189,51 @@ async function executeTriggers(router, oracle, market) {
         const key = ethers.solidityPackedKeccak256(["address", "bytes32", "bool"], [m.owner, m.marketId, m.isLong]);
         const t = await router.triggers(key);
         if (!t.active) continue;
-        const [price] = await oracle.peekPrice(m.marketId);
+        const sym = ethers.decodeBytes32String(m.marketId);
+        const cex = latestPrices?.[sym];
+        if (!(cex > 0)) continue;
+        const price = toWei(cex);
         const tpHit = t.tpPrice > 0n && (m.isLong ? price >= t.tpPrice : price <= t.tpPrice);
         const slHit = t.slPrice > 0n && (m.isLong ? price <= t.slPrice : price >= t.slPrice);
         if (!tpHit && !slHit) continue;
+        await postMarketPrice(oracle, m.marketId, maxDeviationBps); // execution-time price
         await (await sendLockedFor(relayerWallet, () => router.executeTrigger(m.owner, m.marketId, m.isLong, TX()))).wait();
-        console.log(`[${now()}] ${tpHit ? "TP" : "SL"} closed ${m.owner} ${ethers.decodeBytes32String(m.marketId)} ${m.isLong ? "long" : "short"}`);
+        console.log(`[${now()}] ${tpHit ? "TP" : "SL"} closed ${m.owner} ${sym} ${m.isLong ? "long" : "short"}`);
       } catch (e) { console.error(`[${now()}] trigger exec failed: ${e.shortMessage ?? e.message ?? e}`); }
     }
   }
 }
 
-async function liquidateUnderwater(oracle, market) {
+// Liquidations: estimate solvency off-chain from the LIVE CEX price (free) and
+// only touch the chain when a position looks underwater — the signed-price
+// liquidation applies a fresh keeper-signed price atomically, so no routine
+// posting is needed and the contract still verifies against the real price.
+async function liquidateUnderwater(oracle, market, maintBps) {
   const count = await market.openPositionCount();
   const PAGE = 100n;
   for (let offset = 0n; offset < count; offset += PAGE) {
-    const [, metas, flags] = await market.getOpenPositions(offset, PAGE);
-    for (let i = 0; i < flags.length; i++) {
-      if (!flags[i]) continue;
-      const m = metas[i];
+    const [, metas] = await market.getOpenPositions(offset, PAGE);
+    for (const m of metas) {
       try {
         const sym = ethers.decodeBytes32String(m.marketId);
         const cex = latestPrices?.[sym];
-        if (cex && cex > 0) {
-          const ts = Math.floor(Date.now() / 1000);
-          const price = toWei(cex);
-          const sig = await signPrice(oracle, m.marketId, price, ts);
-          await (await sendLockedFor(relayerWallet, () => market.liquidateWithSignedPrice(m.owner, m.marketId, m.isLong, price, ts, sig, TX()))).wait();
-        } else {
-          await (await sendLockedFor(relayerWallet, () => market.liquidate(m.owner, m.marketId, m.isLong, TX()))).wait();
-        }
-        console.log(`[${now()}] liquidated ${m.owner} ${ethers.decodeBytes32String(m.marketId)} ${m.isLong ? "long" : "short"}`);
+        if (!(cex > 0)) continue;
+        const pos = await market.getPosition(m.owner, m.marketId, m.isLong);
+        if (pos.sizeUsd === 0n || pos.sizeTokens === 0n) continue;
+        const sizeUsd = Number(ethers.formatEther(pos.sizeUsd));
+        const sizeTokens = Number(ethers.formatEther(pos.sizeTokens));
+        const collateral = Number(ethers.formatEther(pos.collateralUsd));
+        const entry = sizeUsd / sizeTokens;
+        const pnl = (m.isLong ? cex - entry : entry - cex) * sizeTokens;
+        const maintenance = (sizeUsd * maintBps) / 10000;
+        // 2% cushion above the exact boundary to avoid revert spam; the contract
+        // is the source of truth and re-checks with the applied signed price.
+        if (collateral + pnl > maintenance * 1.02) continue;
+        const ts = Math.floor(Date.now() / 1000);
+        const price = toWei(cex);
+        const sig = await signPrice(oracle, m.marketId, price, ts);
+        await (await sendLockedFor(relayerWallet, () => market.liquidateWithSignedPrice(m.owner, m.marketId, m.isLong, price, ts, sig, TX()))).wait();
+        console.log(`[${now()}] liquidated ${m.owner} ${sym} ${m.isLong ? "long" : "short"}`);
       } catch (e) { console.error(`[${now()}] liquidate failed: ${e.shortMessage ?? e.message ?? e}`); }
     }
   }
@@ -378,6 +402,8 @@ async function main() {
   if (!(await oracle.isKeeper(keeper.address))) throw new Error("not an oracle keeper — oracle.setKeeper() first");
   if (!(await router.isKeeper(relayerWallet.address))) throw new Error("relayer wallet is not a router keeper — router.setKeeper() first");
   const maxDeviationBps = ((await oracle.maxDeviationBps()) * 9n) / 10n;
+  let maintBps = 100; // 1% default
+  try { maintBps = Number(await market.maintenanceMarginBps()); } catch { /* keep default */ }
 
   const refreshTicker = async () => { try { latestPrices = await fetchPrices(); } catch { /* blip */ } };
   await refreshTicker();
@@ -390,10 +416,10 @@ async function main() {
   catch (e) { console.error(`[${now()}] initPrices skipped: ${e.shortMessage ?? e.message ?? e}`); }
 
   for (;;) {
-    try { await maybePushPrices(oracle, router, market, maxDeviationBps); } catch (e) { console.error(`[${now()}] price round failed: ${e.message ?? e}`); }
+    try { await maybePushPrices(oracle, router, maxDeviationBps); } catch (e) { console.error(`[${now()}] price round failed: ${e.message ?? e}`); }
     try { await executePending(router); } catch (e) { console.error(`[${now()}] execute round failed: ${e.message ?? e}`); }
-    try { await executeTriggers(router, oracle, market); } catch (e) { console.error(`[${now()}] trigger round failed: ${e.message ?? e}`); }
-    try { await liquidateUnderwater(oracle, market); } catch (e) { console.error(`[${now()}] liquidation round failed: ${e.message ?? e}`); }
+    try { await executeTriggers(router, oracle, market, maxDeviationBps); } catch (e) { console.error(`[${now()}] trigger round failed: ${e.message ?? e}`); }
+    try { await liquidateUnderwater(oracle, market, maintBps); } catch (e) { console.error(`[${now()}] liquidation round failed: ${e.message ?? e}`); }
     await new Promise((r) => setTimeout(r, INTERVAL_MS));
   }
 }

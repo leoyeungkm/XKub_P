@@ -100,7 +100,7 @@ export default function MarketBar({
   const longPct = totalOi > 0 ? (longOi / totalOi) * 100 : 50;
 
   return (
-    <div className="flex flex-wrap items-stretch gap-x-6 gap-y-3 border-b border-line px-5 py-3">
+    <div className="flex flex-wrap items-stretch gap-x-4 gap-y-3 border-b border-line px-3 py-2.5 sm:gap-x-6 sm:px-5 sm:py-3">
       {/* market selector */}
       <div className="flex items-center gap-1.5">
         {MARKETS.map((m) => (

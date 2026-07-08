@@ -28,6 +28,15 @@ export const metadata: Metadata = {
   description: "Perpetual futures on Bitkub Chain",
 };
 
+// Render at device width (not zoomed-out desktop) and disable auto-zoom on input
+// focus; cover the notch/safe areas on phones.
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover" as const,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
@@ -46,6 +55,8 @@ export default function RootLayout({
             <OnboardingModal />
             <FaucetModal />
             <RefCapture />
+            {/* clears the fixed mobile bottom nav */}
+            <div className="h-14 md:hidden" />
           </LanguageProvider>
         </Providers>
       </body>

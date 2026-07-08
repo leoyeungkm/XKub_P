@@ -48,18 +48,24 @@ export default function Header() {
     openFaucet(); // popup: platform claim / self-mint KUSDT / official faucet link
   };
 
+  const navItems = [
+    { href: "/", label: t("nav.trade") },
+    { href: "/portfolio", label: t("nav.portfolio") },
+    { href: "/earn", label: t("nav.earn") },
+    { href: "/referral", label: t("nav.referral") },
+    ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
+  ];
+
   return (
-    <header className="flex items-center gap-4 border-b border-line bg-panel/60 px-5 py-3 backdrop-blur">
+    <>
+    <header className="flex items-center gap-2 border-b border-line bg-panel/60 px-3 py-2.5 backdrop-blur sm:gap-4 sm:px-5 sm:py-3">
       <div className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
         <span className="grid h-6 w-6 place-items-center rounded-md bg-accent text-[13px] font-bold text-bg">X</span>
-        Kub<span className="text-muted">Perp</span>
+        <span className="hidden sm:inline">Kub<span className="text-muted">Perp</span></span>
       </div>
-      <nav className="flex items-center gap-0.5 text-[13px]">
-        <NavLink href="/" label={t("nav.trade")} active={pathname === "/"} />
-        <NavLink href="/portfolio" label={t("nav.portfolio")} active={pathname === "/portfolio"} />
-        <NavLink href="/earn" label={t("nav.earn")} active={pathname === "/earn"} />
-        <NavLink href="/referral" label={t("nav.referral")} active={pathname === "/referral"} />
-        {isAdmin && <NavLink href="/admin" label="Admin" active={pathname === "/admin"} />}
+      {/* desktop nav — mobile uses the bottom bar */}
+      <nav className="hidden items-center gap-0.5 text-[13px] md:flex">
+        {navItems.map((n) => <NavLink key={n.href} href={n.href} label={n.label} active={pathname === n.href} />)}
       </nav>
       <div className="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[10.5px] text-muted lg:flex">
         <span className="h-1.5 w-1.5 rounded-full bg-green" />
@@ -69,7 +75,7 @@ export default function Header() {
       {isConnected && (
         <button
           onClick={() => window.dispatchEvent(new Event("xkub:getstarted"))}
-          className="rounded-md bg-accentDim px-3 py-2 text-[12px] font-medium text-accent transition-opacity hover:opacity-90"
+          className="hidden rounded-md bg-accentDim px-3 py-2 text-[12px] font-medium text-accent transition-opacity hover:opacity-90 sm:block"
         >
           {t("onb.getStarted")}
         </button>
@@ -79,7 +85,7 @@ export default function Header() {
       <button
         title={t("faucet.button")}
         onClick={faucet}
-        className="rounded-md border border-line px-3 py-2 text-[12px] text-muted transition-colors hover:border-accent/40 hover:text-fg"
+        className="rounded-md border border-line px-2.5 py-2 text-[12px] text-muted transition-colors hover:border-accent/40 hover:text-fg sm:px-3"
       >
         {t("faucet.button")}
       </button>
@@ -113,12 +119,26 @@ export default function Header() {
       ) : (
         <button
           onClick={() => connect({ connector: connectors[0], chainId: chain.id })}
-          className="rounded-md bg-accent px-4 py-2 font-semibold text-bg transition-opacity hover:opacity-90"
+          className="rounded-md bg-accent px-3 py-2 text-[13px] font-semibold text-bg transition-opacity hover:opacity-90 sm:px-4 sm:text-[14px]"
         >
-          Connect Wallet
+          Connect
         </button>
       )}
     </header>
+
+    {/* mobile bottom tab bar */}
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      {navItems.map((n) => {
+        const active = pathname === n.href;
+        return (
+          <Link key={n.href} href={n.href}
+            className={`flex-1 py-2.5 text-center text-[12px] font-medium transition-colors ${active ? "text-accent" : "text-muted"}`}>
+            {n.label}
+          </Link>
+        );
+      })}
+    </nav>
+    </>
   );
 }
 

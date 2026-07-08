@@ -45,7 +45,7 @@ async function fetchKlines(symbol: string): Promise<CandlestickData[]> {
   }));
 }
 
-export default function Chart({ symbol, height = 460 }: { symbol: string; height?: number }) {
+export default function Chart({ symbol }: { symbol: string }) {
   const light = useIsLight();
   const t = useT();
   const { address } = useAccount();
@@ -169,7 +169,7 @@ export default function Chart({ symbol, height = 460 }: { symbol: string; height
   }, [positions, trigData, orders, toggles, klines]);
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-lg border border-line bg-panel" style={{ height }}>
+    <div className="flex h-full flex-col overflow-hidden rounded-lg border border-line bg-panel">
       <div className="flex items-center gap-1 border-b border-line px-2.5 py-1.5">
         <Toggle on={toggles.entry} onClick={() => flip("entry")} dot="#16b979">{t("chart.entry")}</Toggle>
         <Toggle on={toggles.tpsl} onClick={() => flip("tpsl")} dot="#ef4b64">TP/SL</Toggle>

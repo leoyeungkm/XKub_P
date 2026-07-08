@@ -350,7 +350,13 @@ function startRelayer(router, oracle, maxDeviationBps, kusdt) {
 
 // ── main ───────────────────────────────────────────────────────────────────────
 async function refreshGasPrice() {
-  try { const fd = await provider.getFeeData(); if (fd.gasPrice) GAS_PRICE = fd.gasPrice; } catch { /* keep last */ }
+  // eth_gasPrice reads ~185 gwei on KUB testnet but ~100 mines reliably (min
+  // ~55). Clamp to a 60-100 band — roughly halves every keeper tx's cost.
+  const MIN = 60n * 10n ** 9n, MAX = 100n * 10n ** 9n;
+  try {
+    const fd = await provider.getFeeData();
+    if (fd.gasPrice) GAS_PRICE = fd.gasPrice < MIN ? MIN : fd.gasPrice > MAX ? MAX : fd.gasPrice;
+  } catch { /* keep last */ }
 }
 
 async function main() {

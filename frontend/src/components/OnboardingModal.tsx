@@ -9,9 +9,10 @@ import { useEffect, useState } from "react";
 import { formatEther, parseEther } from "viem";
 import { useAccount, useChainId, usePublicClient, useReadContract, useSwitchChain, useWriteContract } from "wagmi";
 import toast from "react-hot-toast";
-import { ADDR, b32, chain, erc20Abi, kubTxOverrides, referralAbi, requestFaucet, routerAbi, tokenToUsd, usdToToken } from "@/config/contracts";
+import { ADDR, b32, chain, erc20Abi, kubTxOverrides, referralAbi, routerAbi, tokenToUsd, usdToToken } from "@/config/contracts";
 import { errMsg, fmtNum } from "@/lib/format";
 import { ensureAgentAccount, useOneClick } from "@/lib/oneclick";
+import { useFaucet } from "@/lib/faucet";
 import { useT } from "@/lib/i18n";
 
 const seenKey = (o: string) => `xkub.onboard.${o.toLowerCase()}`;
@@ -27,12 +28,12 @@ export default function OnboardingModal() {
   const { switchChainAsync } = useSwitchChain();
   const oc = useOneClick();
   const t = useT();
+  const runFaucet = useFaucet();
 
   const getFaucet = async () => {
     if (!address) return;
-    const p = requestFaucet(address);
-    toast.promise(p, { loading: t("faucet.loading"), success: t("faucet.success"), error: t("faucet.error") });
-    await p;
+    await toast.promise(runFaucet(), { loading: t("faucet.loading"), success: t("faucet.success"), error: t("faucet.error") });
+    refetchWallet();
   };
 
   const [open, setOpen] = useState(false);
@@ -42,7 +43,7 @@ export default function OnboardingModal() {
   const [refCode, setRefCode] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const { data: walletBal } = useReadContract({
+  const { data: walletBal, refetch: refetchWallet } = useReadContract({
     address: ADDR.kusdt, abi: erc20Abi, functionName: "balanceOf",
     args: address ? [address] : undefined,
     query: { enabled: !!address, refetchInterval: 8000 },
@@ -103,16 +104,13 @@ export default function OnboardingModal() {
         }
       }
 
-      // Email/embedded-wallet users start with 0 tKUB and can't pay for the setup
-      // gas — top them up from the faucet (also mints test KUSDT) and wait for it.
+      // Email/embedded-wallet users start empty — fund test KUB (gas) + KUSDT
+      // (collateral) before setup, so they can pay gas and have something to deposit.
       const kub = await client.getBalance({ address });
-      if (kub < parseEther("0.08")) {
+      if (kub < parseEther("0.08") || (walletBal ?? 0n) < parseEther("1")) {
         toast(t("faucet.loading"));
-        await requestFaucet(address);
-        for (let i = 0; i < 12; i++) {
-          await new Promise((r) => setTimeout(r, 2500));
-          if ((await client.getBalance({ address })) >= parseEther("0.05")) break;
-        }
+        try { await runFaucet(); } catch { /* best effort */ }
+        refetchWallet();
       }
 
       const agent = ensureAgentAccount(address);

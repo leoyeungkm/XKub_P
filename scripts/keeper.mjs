@@ -234,12 +234,12 @@ function startRelayer(router, oracle, maxDeviationBps, kusdt) {
             res.writeHead(503); return res.end(JSON.stringify({ error: "faucet empty" }));
           }
           faucetClaimed.add(addr.toLowerCase());
+          // Send tKUB only (a single reliable transfer). Test KUSDT is minted by
+          // the user's own wallet from the frontend (mint is open) — that avoids
+          // nonce races with the keeper's price-posting txs.
           const already = await provider.getBalance(addr);
-          const jobs = [];
-          if (already < FAUCET_KUB / 2n) jobs.push((await keeper.sendTransaction({ to: addr, value: FAUCET_KUB, ...TX(), gasLimit: 21000n })).wait());
-          try { jobs.push((await kusdt.mint(addr, FAUCET_KUSDT, TX())).wait()); } catch { /* mint may be restricted */ }
-          await Promise.all(jobs);
-          console.log(`[${now()}] faucet -> ${addr}`);
+          if (already < FAUCET_KUB / 2n) await (await keeper.sendTransaction({ to: addr, value: FAUCET_KUB, ...TX(), gasLimit: 21000n })).wait();
+          console.log(`[${now()}] faucet -> ${addr} (${ethers.formatEther(FAUCET_KUB)} KUB)`);
           res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true }));
         } catch (e) {
           console.error(`[${now()}] faucet failed: ${e.shortMessage ?? e.message ?? e}`);

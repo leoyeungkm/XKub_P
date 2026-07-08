@@ -9,7 +9,8 @@ import { usePathname } from "next/navigation";
 import toast from "react-hot-toast";
 import ThemeToggle from "./ThemeToggle";
 import { useT, LangToggle } from "@/lib/i18n";
-import { ADDR, CFG, chain, erc20Abi, tokenToUsd, requestFaucet } from "@/config/contracts";
+import { ADDR, CFG, chain, erc20Abi, tokenToUsd } from "@/config/contracts";
+import { useFaucet } from "@/lib/faucet";
 import { shortAddr, errMsg, fmtUsd } from "@/lib/format";
 import { PRIVY_ENABLED } from "@/lib/privy";
 import PrivyConnect from "./PrivyConnect";
@@ -22,6 +23,7 @@ export default function Header() {
   const client = usePublicClient();
   const pathname = usePathname();
   const t = useT();
+  const runFaucet = useFaucet();
 
   const { data: kubBal } = useBalance({
     address,
@@ -37,15 +39,11 @@ export default function Header() {
 
   const faucet = async () => {
     if (!address) return toast.error(t("toast.connectFirst"));
-    // Keeper faucet: sends tKUB (gas) + mints 10k test KUSDT, no user gas needed —
-    // so it works even for email/embedded wallets that start with 0 KUB.
-    const p = requestFaucet(address);
-    toast.promise(p, {
+    toast.promise(runFaucet(), {
       loading: t("faucet.loading"),
       success: t("faucet.success"),
       error: t("faucet.error"),
     });
-    await p;
   };
 
   return (

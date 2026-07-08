@@ -93,7 +93,9 @@ export default function TradePanel({ symbol }: { symbol: string }) {
     if (availableUsd > 0) {
       defaultedRef.current = true;
       setMode("cost");
-      setAmount(String(Math.min(minColUsd, Math.floor(availableUsd * 100) / 100)));
+      // 5% above the contract minimum: the open fee is deducted from collateral
+      // before the min check, so defaulting to exactly the minimum reverts.
+      setAmount(String(Math.min(Math.ceil(minColUsd * 1.05), Math.floor(availableUsd * 100) / 100)));
     }
   }, [availableUsd, minColUsd, amount]);
 
@@ -119,6 +121,17 @@ export default function TradePanel({ symbol }: { symbol: string }) {
   const submit = async () => {
     if (!address || !client) return toast.error(t("toast.connectFirst"));
     if (!(colNum > 0)) return toast.error(t("toast.enterCollateral"));
+    // The market deducts the open fee from collateral BEFORE the min-collateral
+    // check, so validate the same way — otherwise high leverage (small collateral
+    // for the same size) reverts on-chain with "collateral < min".
+    {
+      const feeBps = myFee.effectiveFeeBps ?? fees.feeBps ?? 3;
+      const openFeeUsd = sizeUsd * (feeBps / 10000);
+      if (colNum - openFeeUsd < minColUsd) {
+        const needed = Math.ceil((minColUsd + openFeeUsd) * 100) / 100;
+        return toast.error(t("trade.minCollateralErr").replace("{min}", String(needed)));
+      }
+    }
     setBusy(true);
     refreshPositions(); // start polling now so the position shows the moment it mines
     // Optimistic: show a "confirming" position row immediately (display-only).

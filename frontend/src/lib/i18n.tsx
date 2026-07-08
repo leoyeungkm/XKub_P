@@ -153,6 +153,7 @@ const en: Record<string, string> = {
   "trade.oppositeFull": "You already hold a {side} {sym} position. One side per market — close it before opening the other side.",
   "side.long": "long",
   "side.short": "short",
+  "trade.minCollateralErr": "Margin after the open fee must be at least ${min} — add margin or lower the leverage",
   // toasts (no "gasless" jargon)
   "toast.orderSubmitted": "Order submitted — fills at the next price",
   "toast.orderQueued": "Order queued — fills at the next price",
@@ -427,6 +428,7 @@ const zh: Record<string, string> = {
   "trade.oppositeFull": "你已持有 {sym} 嘅{side}倉。一個市場只可單邊持倉——請先平掉反方向倉位。",
   "side.long": "多",
   "side.short": "空",
+  "trade.minCollateralErr": "扣除開倉費後保證金需至少 ${min} — 請加大保證金或降低槓桿",
   "toast.orderSubmitted": "已提交委託 — 下一個報價成交",
   "toast.orderQueued": "已排隊委託 — 下一個報價成交",
   "toast.closeSubmitted": "已提交平倉 — 下一個報價成交",

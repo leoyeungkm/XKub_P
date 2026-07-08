@@ -11,7 +11,8 @@ services:
     plan: starter            # $7/mo, never sleeps. Change to "free" only for quick tests.
     region: singapore        # closest to KUB / Thailand; pick your nearest
     buildCommand: npm ci
-    startCommand: npm run keeper:perp:testnet
+    # Standalone plain-ethers keeper (~73MB) — the hardhat runner OOMs on 512MB.
+    startCommand: node scripts/keeper.mjs
     healthCheckPath: /prices
     envVars:
       - key: KUB_PRIVATE_KEY  # keeper signer — set as a secret in the dashboard

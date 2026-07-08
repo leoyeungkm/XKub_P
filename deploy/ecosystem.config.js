@@ -6,8 +6,8 @@ module.exports = {
     {
       name: "xkub-keeper",
       cwd: __dirname + "/..",
-      script: "npm",
-      args: "run keeper:perp:testnet",
+      // Standalone plain-ethers keeper (~73MB); the hardhat runner needs >512MB.
+      script: "scripts/keeper.mjs",
       env: {
         RELAYER_PORT: "8799",
         // KUB_PRIVATE_KEY is read from .env — keep it there, never commit it.

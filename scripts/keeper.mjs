@@ -39,9 +39,11 @@ const TX = () => ({ type: 0, gasPrice: GAS_PRICE });
 // Testnet faucet: email/embedded-wallet users have 0 tKUB and can't pay for the
 // setup/deposit owner tx. Drip a little native KUB (for gas) + mint test KUSDT,
 // once per address. In-memory guard (resets on redeploy — fine for a demo).
-const FAUCET_KUB = ethers.parseEther(process.env.FAUCET_KUB ?? "0.2");
-const FAUCET_KUSDT = ethers.parseEther(process.env.FAUCET_KUSDT ?? "10000");
-const faucetClaimed = new Set();
+const FAUCET_KUB = ethers.parseEther(process.env.FAUCET_KUB ?? "0.1"); // enough for setup + a few owner txs
+const FAUCET_RESERVE = ethers.parseEther(process.env.FAUCET_RESERVE ?? "1"); // keeper always keeps this for its own ops
+const IP_COOLDOWN_MS = Number(process.env.FAUCET_IP_COOLDOWN_MS ?? 6 * 3600 * 1000); // 6h per IP
+const faucetClaimed = new Set(); // per-address (in-memory; resets on redeploy)
+const faucetIps = new Map();      // ip -> last-claim ms
 
 async function fetchJson(url) {
   const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
@@ -210,7 +212,7 @@ async function initPricesToReal(oracle, maxDeviationBps) {
 }
 
 // ── gasless relayer (HTTP) ─────────────────────────────────────────────────────
-function startRelayer(router, oracle, maxDeviationBps, kusdt) {
+function startRelayer(router, oracle, maxDeviationBps) {
   const submitted = new Set();
   const server = http.createServer(async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -220,7 +222,7 @@ function startRelayer(router, oracle, maxDeviationBps, kusdt) {
     if (req.method === "GET" && req.url?.startsWith("/prices")) {
       res.writeHead(200, { "content-type": "application/json" }); return res.end(JSON.stringify(latestPrices ?? {}));
     }
-    // Testnet gas + KUSDT faucet (once per address)
+    // Testnet gas faucet (once per address AND once per IP window)
     if (req.method === "POST" && req.url?.startsWith("/faucet")) {
       let fb = "";
       req.on("data", (c) => (fb += c));
@@ -229,11 +231,16 @@ function startRelayer(router, oracle, maxDeviationBps, kusdt) {
           const { address } = JSON.parse(fb || "{}");
           if (!ethers.isAddress(address)) { res.writeHead(400); return res.end(JSON.stringify({ error: "bad address" })); }
           const addr = ethers.getAddress(address);
+          const ip = (String(req.headers["x-forwarded-for"] || "").split(",")[0] || req.socket.remoteAddress || "").trim();
           if (faucetClaimed.has(addr.toLowerCase())) { res.writeHead(429); return res.end(JSON.stringify({ error: "already claimed" })); }
-          if (await provider.getBalance(keeper.address) < FAUCET_KUB + ethers.parseEther("0.3")) {
+          const lastIp = ip ? (faucetIps.get(ip) || 0) : 0;
+          if (ip && Date.now() - lastIp < IP_COOLDOWN_MS) { res.writeHead(429); return res.end(JSON.stringify({ error: "rate limited — try later" })); }
+          // Keep enough KUB for the keeper's own operations (never drain past reserve).
+          if (await provider.getBalance(keeper.address) < FAUCET_KUB + FAUCET_RESERVE) {
             res.writeHead(503); return res.end(JSON.stringify({ error: "faucet empty" }));
           }
           faucetClaimed.add(addr.toLowerCase());
+          if (ip) faucetIps.set(ip, Date.now());
           // Send tKUB only (a single reliable transfer). Test KUSDT is minted by
           // the user's own wallet from the frontend (mint is open) — that avoids
           // nonce races with the keeper's price-posting txs.
@@ -295,7 +302,6 @@ async function main() {
   const oracle = new ethers.Contract(dep.addresses.XKubPriceOracle, abis.oracle, keeper);
   const router = new ethers.Contract(dep.addresses.XKubPerpRouter, abis.router, keeper);
   const market = new ethers.Contract(dep.addresses.XKubPerpMarket, abis.market, keeper);
-  const kusdt = new ethers.Contract(dep.addresses.KUSDT, ["function mint(address,uint256)"], keeper);
 
   console.log(`XKub keeper (standalone) — ${keeper.address} on ${NETWORK}, every ${INTERVAL_MS}ms`);
   await refreshGasPrice();
@@ -308,7 +314,7 @@ async function main() {
   setInterval(refreshTicker, 5000);
   setInterval(refreshGasPrice, 30_000);
 
-  startRelayer(router, oracle, maxDeviationBps, kusdt); // bind port early
+  startRelayer(router, oracle, maxDeviationBps); // bind port early
 
   try { await initPricesToReal(oracle, maxDeviationBps); }
   catch (e) { console.error(`[${now()}] initPrices skipped: ${e.shortMessage ?? e.message ?? e}`); }

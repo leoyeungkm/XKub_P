@@ -152,6 +152,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
       }
 
       // Gasless path (relayer pays gas). Retry once on a transient failure.
+      let gaslessReason = "";
       if (gaslessAvailable()) {
         const gasless = () => submitGaslessOrder({
           owner: address, symbol, isLong, isIncrease: true,
@@ -165,7 +166,11 @@ export default function TradePanel({ symbol }: { symbol: string }) {
           oneClick.refetch();
           refreshPositions();
           return;
-        } catch {
+        } catch (e) {
+          // Surface the REAL reason — a generic "network busy" hides diagnosable
+          // failures (bad sig / price bound / relayer reachability).
+          console.error("gasless order failed:", e);
+          gaslessReason = errMsg(e);
           toast(t("toast.relayerRetry"));
         }
       }
@@ -188,7 +193,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
 
       // Neither path available (relayer down + agent has no gas).
       removePendingOpen(symbol, isLong);
-      toast.error(t("toast.relayerDown"));
+      toast.error(`${t("toast.relayerDown")}${gaslessReason ? ` — ${gaslessReason}` : ""}`);
     } catch (e) {
       removePendingOpen(symbol, isLong); // order failed — drop the placeholder
       toast.error(errMsg(e));

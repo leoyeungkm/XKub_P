@@ -60,6 +60,14 @@ const IP_MAX_CLAIMS = Number(process.env.FAUCET_IP_MAX ?? 3);                   
 const faucetClaimed = new Set(); // per-address (in-memory; resets on redeploy)
 const faucetIps = new Map();      // ip -> array of claim timestamps (ms)
 
+// Ring buffer of recent relay/faucet errors, exposed read-only at /errors so
+// user-reported failures can be diagnosed without dashboard access. Testnet-only.
+const recentErrors = [];
+function logError(kind, detail) {
+  recentErrors.push({ at: now(), kind, detail: String(detail).slice(0, 300) });
+  if (recentErrors.length > 50) recentErrors.shift();
+}
+
 async function fetchJson(url) {
   const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
@@ -237,6 +245,9 @@ function startRelayer(router, oracle, maxDeviationBps, kusdt) {
     if (req.method === "GET" && req.url?.startsWith("/prices")) {
       res.writeHead(200, { "content-type": "application/json" }); return res.end(JSON.stringify(latestPrices ?? {}));
     }
+    if (req.method === "GET" && req.url?.startsWith("/errors")) {
+      res.writeHead(200, { "content-type": "application/json" }); return res.end(JSON.stringify(recentErrors));
+    }
     // Testnet gas faucet (once per address AND once per IP window)
     if (req.method === "POST" && req.url?.startsWith("/faucet")) {
       let fb = "";
@@ -282,6 +293,7 @@ function startRelayer(router, oracle, maxDeviationBps, kusdt) {
           res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true, kub: sentKub, kusdt: sentKusdt }));
         } catch (e) {
           console.error(`[${now()}] faucet failed: ${e.shortMessage ?? e.message ?? e}`);
+          logError("faucet", e.shortMessage ?? e.message ?? e);
           res.writeHead(500); res.end(JSON.stringify({ error: e.shortMessage ?? e.message ?? String(e) }));
         }
       });
@@ -317,6 +329,7 @@ function startRelayer(router, oracle, maxDeviationBps, kusdt) {
       } catch (e) {
         const reason = e.reason ?? e.info?.error?.message ?? e.shortMessage ?? e.message ?? String(e);
         console.error(`[${now()}] relay failed: ${reason}`);
+        logError("relay", reason);
         res.writeHead(400, { "content-type": "application/json" }); res.end(JSON.stringify({ error: reason }));
       }
     });

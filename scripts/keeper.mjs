@@ -39,7 +39,7 @@ const TX = () => ({ type: 0, gasPrice: GAS_PRICE });
 // Testnet faucet: email/embedded-wallet users have 0 tKUB and can't pay for the
 // setup/deposit owner tx. Drip a little native KUB (for gas) + mint test KUSDT,
 // once per address. In-memory guard (resets on redeploy — fine for a demo).
-const FAUCET_KUB = ethers.parseEther(process.env.FAUCET_KUB ?? "0.1"); // enough for setup + a few owner txs
+const FAUCET_KUB = ethers.parseEther(process.env.FAUCET_KUB ?? "0.05"); // enough for the setup owner tx
 const FAUCET_RESERVE = ethers.parseEther(process.env.FAUCET_RESERVE ?? "1"); // keeper always keeps this for its own ops
 const IP_COOLDOWN_MS = Number(process.env.FAUCET_IP_COOLDOWN_MS ?? 6 * 3600 * 1000); // 6h per IP
 const faucetClaimed = new Set(); // per-address (in-memory; resets on redeploy)

@@ -38,7 +38,17 @@ const provider = new ethers.JsonRpcProvider(RPC);
 //                           closes spike at the same time.
 //   FAUCET_PRIVATE_KEY      testnet faucet (no on-chain permission needed)
 const keeper = new ethers.Wallet(process.env.KUB_PRIVATE_KEY, provider);
-const relayerWallet = process.env.RELAYER_PRIVATE_KEY ? new ethers.Wallet(process.env.RELAYER_PRIVATE_KEY, provider) : keeper;
+// Relayer POOL: RELAYER_PRIVATE_KEY accepts a comma-separated list. One wallet's
+// nonces are sequential, so a single stuck tx head-of-line-blocks every relay
+// behind it in the mempool; a pool round-robins orders across wallets for both
+// throughput and stuck-tx isolation. Every pool wallet must be a router keeper.
+const relayerWallets = (process.env.RELAYER_PRIVATE_KEY ?? "")
+  .split(",").map((k) => k.trim()).filter(Boolean)
+  .map((k) => new ethers.Wallet(k, provider));
+if (relayerWallets.length === 0) relayerWallets.push(keeper);
+const relayerWallet = relayerWallets[0]; // default lane for reads/back-compat
+let rrIdx = 0;
+const nextRelayer = () => relayerWallets[rrIdx++ % relayerWallets.length];
 const liquidatorWallet = process.env.LIQUIDATOR_PRIVATE_KEY ? new ethers.Wallet(process.env.LIQUIDATOR_PRIVATE_KEY, provider) : relayerWallet;
 const faucetWallet = process.env.FAUCET_PRIVATE_KEY ? new ethers.Wallet(process.env.FAUCET_PRIVATE_KEY, provider) : keeper;
 const abis = JSON.parse(fs.readFileSync(path.join(__dirname, "keeper-abis.json"), "utf8"));
@@ -177,7 +187,8 @@ async function postMarketPrice(oracle, marketId, maxDeviationBps) {
 async function executePending(router) {
   const ids = await router.getPendingRequests(20);
   for (const id of ids) {
-    try { await (await sendLockedFor(relayerWallet, () => router.executeRequest(id, TX()))).wait(); console.log(`[${now()}] executed request #${id}`); }
+    const rw = nextRelayer();
+    try { await (await sendLockedFor(rw, () => router.connect(rw).executeRequest(id, TX()))).wait(); console.log(`[${now()}] executed request #${id}`); }
     catch (e) { console.error(`[${now()}] execute #${id} failed: ${e.shortMessage ?? e.message ?? e}`); }
   }
 }
@@ -202,7 +213,8 @@ async function executeTriggers(router, oracle, market, maxDeviationBps) {
         const slHit = t.slPrice > 0n && (m.isLong ? price <= t.slPrice : price >= t.slPrice);
         if (!tpHit && !slHit) continue;
         await postMarketPrice(oracle, m.marketId, maxDeviationBps); // execution-time price
-        await (await sendLockedFor(relayerWallet, () => router.executeTrigger(m.owner, m.marketId, m.isLong, TX()))).wait();
+        const rw = nextRelayer();
+        await (await sendLockedFor(rw, () => router.connect(rw).executeTrigger(m.owner, m.marketId, m.isLong, TX()))).wait();
         console.log(`[${now()}] ${tpHit ? "TP" : "SL"} closed ${m.owner} ${sym} ${m.isLong ? "long" : "short"}`);
       } catch (e) { console.error(`[${now()}] trigger exec failed: ${e.shortMessage ?? e.message ?? e}`); }
     }
@@ -361,7 +373,8 @@ function startRelayer(router, oracle, maxDeviationBps, kusdt) {
           const value = toWei(prices[sym]);
           const ts = Math.floor(Date.now() / 1000) - 3;
           const priceSig = await signPrice(oracle, o.marketId, value, ts);
-          const tx = await sendLockedFor(relayerWallet, () => router.executeSignedOrderWithPrice(o, sig, value, ts, priceSig, TX()));
+          const rw = nextRelayer();
+          const tx = await sendLockedFor(rw, () => router.connect(rw).executeSignedOrderWithPrice(o, sig, value, ts, priceSig, TX()));
           const rcpt = await tx.wait(1, 40_000);
           if (!rcpt || rcpt.status !== 1) { submitted.delete(key); throw new Error(`execution reverted on-chain (${tx.hash})`); }
           console.log(`[${now()}] relayed ${o.isIncrease ? "open" : "close"} ${sym} for ${o.owner} #${o.nonce} @ $${Number(ethers.formatEther(value)).toFixed(sym === "KUB" ? 4 : 0)} (${tx.hash})`);
@@ -402,12 +415,14 @@ async function main() {
 
   console.log(`XKub keeper (standalone) on ${NETWORK}, every ${INTERVAL_MS}ms`);
   console.log(`  price:   ${keeper.address}`);
-  console.log(`  relayer: ${relayerWallet.address}${relayerWallet === keeper ? " (same key)" : ""}`);
+  console.log(`  relayer: ${relayerWallets.map((w) => w.address).join(", ")}${relayerWallet === keeper ? " (same key)" : ""} (${relayerWallets.length} lane${relayerWallets.length > 1 ? "s" : ""})`);
   console.log(`  liquidator: ${liquidatorWallet.address}${liquidatorWallet === relayerWallet ? " (same key)" : ""}`);
   console.log(`  faucet:  ${faucetWallet.address}${faucetWallet === keeper ? " (same key)" : ""}`);
   await refreshGasPrice();
   if (!(await oracle.isKeeper(keeper.address))) throw new Error("not an oracle keeper — oracle.setKeeper() first");
-  if (!(await router.isKeeper(relayerWallet.address))) throw new Error("relayer wallet is not a router keeper — router.setKeeper() first");
+  for (const w of relayerWallets) {
+    if (!(await router.isKeeper(w.address))) throw new Error(`relayer ${w.address} is not a router keeper — router.setKeeper() first`);
+  }
   const maxDeviationBps = ((await oracle.maxDeviationBps()) * 9n) / 10n;
   let maintBps = 100; // 1% default
   try { maintBps = Number(await market.maintenanceMarginBps()); } catch { /* keep default */ }

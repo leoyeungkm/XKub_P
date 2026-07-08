@@ -129,22 +129,26 @@ export const RELAYER_URL = (CFG as { relayerUrl?: string }).relayerUrl ?? "";
 // Testnet faucet (keeper endpoint): drip tKUB for gas + mint test KUSDT, once per
 // address. Lets email/embedded-wallet users onboard without an external faucet.
 export const FAUCET_URL = RELAYER_URL ? RELAYER_URL.replace(/\/order\/?$/, "/faucet") : "";
-export type FaucetResult = "sent" | "already" | "rate-limited" | "empty" | "error";
-export async function requestFaucet(address: string): Promise<FaucetResult> {
-  if (!FAUCET_URL) return "error";
+export type FaucetOutcome = {
+  status: "sent" | "already" | "rate-limited" | "empty" | "error";
+  kub: boolean;   // native gas was sent
+  kusdt: boolean; // test collateral was sent
+};
+export async function requestFaucet(address: string): Promise<FaucetOutcome> {
+  if (!FAUCET_URL) return { status: "error", kub: false, kusdt: false };
   try {
     const r = await fetch(FAUCET_URL, {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ address }), signal: AbortSignal.timeout(30000),
+      body: JSON.stringify({ address }), signal: AbortSignal.timeout(60000),
     });
-    if (r.ok) return "sent";
-    const j = await r.json().catch(() => ({} as { error?: string }));
+    const j = await r.json().catch(() => ({} as { error?: string; kub?: boolean; kusdt?: boolean }));
+    if (r.ok) return { status: "sent", kub: !!j.kub, kusdt: !!j.kusdt };
     // Distinguish "this address was already funded" (fine — carry on) from
     // "the IP is rate-limited" (this address got NOTHING; don't pretend it did).
-    if (r.status === 429) return j.error === "already claimed" ? "already" : "rate-limited";
-    if (r.status === 503) return "empty";
-    return "error";
-  } catch { return "error"; }
+    if (r.status === 429) return { status: j.error === "already claimed" ? "already" : "rate-limited", kub: false, kusdt: false };
+    if (r.status === 503) return { status: "empty", kub: false, kusdt: false };
+    return { status: "error", kub: false, kusdt: false };
+  } catch { return { status: "error", kub: false, kusdt: false }; }
 }
 
 // KUB Chain has NO EIP-1559 — its blocks carry no baseFeePerGas. Wallets like

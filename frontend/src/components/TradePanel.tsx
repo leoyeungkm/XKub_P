@@ -428,16 +428,6 @@ export default function TradePanel({ symbol }: { symbol: string }) {
         />
         <Row k="Used margin" v={`${fmtUsd(account.positionMarginUsd)} USD`} />
         <Row k="Account value" v={`${fmtUsd(account.accountValueUsd)} USD`} accent />
-        {oneClick.active && (
-          <>
-            <div className="my-1 border-t border-lineSoft" />
-            <Row
-              k="Agent gas"
-              v={`${Number(formatEther(oneClick.agentGas)).toFixed(3)} KUB`}
-              tone={oneClick.agentGas < parseEther("0.01") ? "red" : undefined}
-            />
-          </>
-        )}
       </Section>
     </div>
   );

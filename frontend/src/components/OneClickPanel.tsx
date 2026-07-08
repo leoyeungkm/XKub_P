@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { formatEther, parseEther } from "viem";
 import { useAccount } from "wagmi";
 import { fmtUsd, shortAddr } from "@/lib/format";
 import { tokenToUsd } from "@/config/contracts";
-import { GAS_TOPUP, useOneClickActions } from "@/lib/oneclickActions";
+import { useOneClickActions } from "@/lib/oneclickActions";
 
 // Trade-page widget: status + gas top-up + disable. Enabling is driven by the
 // onboarding modal; collateral deposit/withdraw lives in Portfolio.
@@ -48,13 +47,10 @@ export default function OneClickPanel() {
         ) : (
           <>
             <p className="text-[12px] leading-relaxed text-muted">
-              一鍵交易已啟用，餘額與 Agent gas 見下方 Account。
+              一鍵交易已啟用 —— 交易 gas 由平台代付,你唔使入 gas。入金到 Trading balance 即可交易。
             </p>
-            <div className="flex items-center gap-2 text-[11px]">
-              <button onClick={oc.topUp} disabled={oc.busy} className="text-accent transition-opacity hover:opacity-80 disabled:opacity-40">
-                充 gas +{formatEther(GAS_TOPUP)} KUB
-              </button>
-              <Link href="/portfolio" className="text-muted hover:text-fg">入金 →</Link>
+            <div className="flex items-center gap-3 text-[11px]">
+              <Link href="/portfolio" className="text-accent hover:opacity-80">入金 →</Link>
               <div className="flex-1" />
               <button onClick={oc.disable} disabled={oc.busy} className="text-mutedDim transition-colors hover:text-red disabled:opacity-40">
                 停用

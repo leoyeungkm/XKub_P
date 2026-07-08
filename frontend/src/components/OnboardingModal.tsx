@@ -216,7 +216,7 @@ export default function OnboardingModal() {
               暫不入金，只啟用一鍵交易
             </button>
             <p className="text-[11px] leading-relaxed text-mutedDim">
-              授權代理、入金、充 gas、生成邀請碼一筆交易完成。首次需額外一次 KUSDT 授權（approve）。
+              授權代理、入金、生成邀請碼一筆交易完成。交易 gas 由平台代付,你唔使入 KUB。首次需額外一次 KUSDT 授權（approve）。
             </p>
           </div>
         )}

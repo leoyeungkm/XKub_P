@@ -301,6 +301,27 @@ function startRelayer(router, oracle, maxDeviationBps, kusdt) {
     if (req.method === "GET" && req.url?.startsWith("/errors")) {
       res.writeHead(200, { "content-type": "application/json" }); return res.end(JSON.stringify(recentErrors));
     }
+    // Ops status: role-wallet addresses + live KUB/KUSDT balances (for /admin).
+    if (req.method === "GET" && req.url?.startsWith("/status")) {
+      try {
+        const bal = async (w) => ethers.formatEther(await provider.getBalance(w.address));
+        const uniq = [keeper, ...relayerWallets, liquidatorWallet, faucetWallet].filter((w, i, a) => a.findIndex((x) => x.address === w.address) === i);
+        const wallets = [];
+        for (const w of uniq) {
+          const roles = [];
+          if (w === keeper) roles.push("price");
+          if (relayerWallets.includes(w)) roles.push("relayer");
+          if (w === liquidatorWallet) roles.push("liquidator");
+          if (w === faucetWallet) roles.push("faucet");
+          wallets.push({ address: w.address, roles, kub: await bal(w) });
+        }
+        const faucetKusdt = ethers.formatEther(await kusdt.balanceOf(faucetWallet.address));
+        res.writeHead(200, { "content-type": "application/json" });
+        return res.end(JSON.stringify({ wallets, faucetKusdt, gasPriceGwei: Number(GAS_PRICE / 10n ** 9n), errors: recentErrors.length, prices: latestPrices }));
+      } catch (e) {
+        res.writeHead(500); return res.end(JSON.stringify({ error: String(e).slice(0, 120) }));
+      }
+    }
     // Testnet gas faucet (once per address AND once per IP window)
     if (req.method === "POST" && req.url?.startsWith("/faucet")) {
       let fb = "";

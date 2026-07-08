@@ -35,6 +35,13 @@ export default function Header() {
     args: address ? [address] : undefined,
     query: { enabled: !!address, refetchInterval: 8000 },
   });
+  const { data: adminAddr } = useReadContract({
+    address: ADDR.market,
+    abi: [{ type: "function", name: "admin", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] }] as const,
+    functionName: "admin",
+    query: { enabled: !!address },
+  });
+  const isAdmin = !!address && !!adminAddr && address.toLowerCase() === (adminAddr as string).toLowerCase();
 
   const faucet = () => {
     if (!address) return toast.error(t("toast.connectFirst"));
@@ -52,6 +59,7 @@ export default function Header() {
         <NavLink href="/portfolio" label={t("nav.portfolio")} active={pathname === "/portfolio"} />
         <NavLink href="/earn" label={t("nav.earn")} active={pathname === "/earn"} />
         <NavLink href="/referral" label={t("nav.referral")} active={pathname === "/referral"} />
+        {isAdmin && <NavLink href="/admin" label="Admin" active={pathname === "/admin"} />}
       </nav>
       <div className="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[10.5px] text-muted lg:flex">
         <span className="h-1.5 w-1.5 rounded-full bg-green" />

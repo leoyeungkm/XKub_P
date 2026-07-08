@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import { formatEther, parseEther } from "viem";
 import { useAccount, useChainId, usePublicClient, useReadContract, useSwitchChain, useWriteContract } from "wagmi";
 import toast from "react-hot-toast";
-import { ADDR, b32, chain, erc20Abi, kubTxOverrides, referralAbi, routerAbi, tokenToUsd, usdToToken } from "@/config/contracts";
+import { ADDR, b32, chain, erc20Abi, kubTxOverrides, referralAbi, requestFaucet, routerAbi, tokenToUsd, usdToToken } from "@/config/contracts";
 import { errMsg, fmtNum } from "@/lib/format";
 import { ensureAgentAccount, useOneClick } from "@/lib/oneclick";
 
@@ -91,6 +91,18 @@ export default function OnboardingModal() {
           await switchChainAsync({ chainId: chain.id });
         } catch {
           throw new Error(`請喺錢包切換到 ${chain.name}（chainId ${chain.id}）後再試`);
+        }
+      }
+
+      // Email/embedded-wallet users start with 0 tKUB and can't pay for the setup
+      // gas — top them up from the faucet (also mints test KUSDT) and wait for it.
+      const kub = await client.getBalance({ address });
+      if (kub < parseEther("0.08")) {
+        toast("領取測試 KUB…");
+        await requestFaucet(address);
+        for (let i = 0; i < 12; i++) {
+          await new Promise((r) => setTimeout(r, 2500));
+          if ((await client.getBalance({ address })) >= parseEther("0.05")) break;
         }
       }
 

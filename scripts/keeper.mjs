@@ -36,6 +36,13 @@ const toWei = (price) => BigInt(Math.round(price * 1e8)) * (E18 / 10n ** 8n);
 let GAS_PRICE = 100n * 10n ** 9n; // refreshed from the chain; legacy (KUB has no EIP-1559)
 const TX = () => ({ type: 0, gasPrice: GAS_PRICE });
 
+// Testnet faucet: email/embedded-wallet users have 0 tKUB and can't pay for the
+// setup/deposit owner tx. Drip a little native KUB (for gas) + mint test KUSDT,
+// once per address. In-memory guard (resets on redeploy — fine for a demo).
+const FAUCET_KUB = ethers.parseEther(process.env.FAUCET_KUB ?? "0.2");
+const FAUCET_KUSDT = ethers.parseEther(process.env.FAUCET_KUSDT ?? "10000");
+const faucetClaimed = new Set();
+
 async function fetchJson(url) {
   const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
@@ -203,7 +210,7 @@ async function initPricesToReal(oracle, maxDeviationBps) {
 }
 
 // ── gasless relayer (HTTP) ─────────────────────────────────────────────────────
-function startRelayer(router, oracle, maxDeviationBps) {
+function startRelayer(router, oracle, maxDeviationBps, kusdt) {
   const submitted = new Set();
   const server = http.createServer(async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -212,6 +219,34 @@ function startRelayer(router, oracle, maxDeviationBps) {
     if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
     if (req.method === "GET" && req.url?.startsWith("/prices")) {
       res.writeHead(200, { "content-type": "application/json" }); return res.end(JSON.stringify(latestPrices ?? {}));
+    }
+    // Testnet gas + KUSDT faucet (once per address)
+    if (req.method === "POST" && req.url?.startsWith("/faucet")) {
+      let fb = "";
+      req.on("data", (c) => (fb += c));
+      req.on("end", async () => {
+        try {
+          const { address } = JSON.parse(fb || "{}");
+          if (!ethers.isAddress(address)) { res.writeHead(400); return res.end(JSON.stringify({ error: "bad address" })); }
+          const addr = ethers.getAddress(address);
+          if (faucetClaimed.has(addr.toLowerCase())) { res.writeHead(429); return res.end(JSON.stringify({ error: "already claimed" })); }
+          if (await provider.getBalance(keeper.address) < FAUCET_KUB + ethers.parseEther("0.3")) {
+            res.writeHead(503); return res.end(JSON.stringify({ error: "faucet empty" }));
+          }
+          faucetClaimed.add(addr.toLowerCase());
+          const already = await provider.getBalance(addr);
+          const jobs = [];
+          if (already < FAUCET_KUB / 2n) jobs.push((await keeper.sendTransaction({ to: addr, value: FAUCET_KUB, ...TX(), gasLimit: 21000n })).wait());
+          try { jobs.push((await kusdt.mint(addr, FAUCET_KUSDT, TX())).wait()); } catch { /* mint may be restricted */ }
+          await Promise.all(jobs);
+          console.log(`[${now()}] faucet -> ${addr}`);
+          res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+          console.error(`[${now()}] faucet failed: ${e.shortMessage ?? e.message ?? e}`);
+          res.writeHead(500); res.end(JSON.stringify({ error: e.shortMessage ?? e.message ?? String(e) }));
+        }
+      });
+      return;
     }
     if (req.method !== "POST" || !req.url?.startsWith("/order")) { res.writeHead(404); return res.end(); }
     let body = "";
@@ -260,6 +295,7 @@ async function main() {
   const oracle = new ethers.Contract(dep.addresses.XKubPriceOracle, abis.oracle, keeper);
   const router = new ethers.Contract(dep.addresses.XKubPerpRouter, abis.router, keeper);
   const market = new ethers.Contract(dep.addresses.XKubPerpMarket, abis.market, keeper);
+  const kusdt = new ethers.Contract(dep.addresses.KUSDT, ["function mint(address,uint256)"], keeper);
 
   console.log(`XKub keeper (standalone) — ${keeper.address} on ${NETWORK}, every ${INTERVAL_MS}ms`);
   await refreshGasPrice();
@@ -272,7 +308,7 @@ async function main() {
   setInterval(refreshTicker, 5000);
   setInterval(refreshGasPrice, 30_000);
 
-  startRelayer(router, oracle, maxDeviationBps); // bind port early
+  startRelayer(router, oracle, maxDeviationBps, kusdt); // bind port early
 
   try { await initPricesToReal(oracle, maxDeviationBps); }
   catch (e) { console.error(`[${now()}] initPrices skipped: ${e.shortMessage ?? e.message ?? e}`); }

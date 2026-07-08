@@ -126,6 +126,20 @@ export const routerAbi = parseAbi([
 
 export const RELAYER_URL = (CFG as { relayerUrl?: string }).relayerUrl ?? "";
 
+// Testnet faucet (keeper endpoint): drip tKUB for gas + mint test KUSDT, once per
+// address. Lets email/embedded-wallet users onboard without an external faucet.
+export const FAUCET_URL = RELAYER_URL ? RELAYER_URL.replace(/\/order\/?$/, "/faucet") : "";
+export async function requestFaucet(address: string): Promise<boolean> {
+  if (!FAUCET_URL) return false;
+  try {
+    const r = await fetch(FAUCET_URL, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ address }), signal: AbortSignal.timeout(30000),
+    });
+    return r.ok || r.status === 429; // 429 = already funded before
+  } catch { return false; }
+}
+
 // KUB Chain has NO EIP-1559 — its blocks carry no baseFeePerGas. Wallets like
 // OKX/MetaMask default to Type-2 (EIP-1559) txs, which this node silently drops
 // (the wallet still returns a hash, so the dapp hangs waiting for a receipt that

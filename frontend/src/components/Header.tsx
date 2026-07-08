@@ -4,23 +4,21 @@ import {
   useAccount, useBalance, useConnect, useDisconnect, useReadContract,
   usePublicClient,
 } from "wagmi";
-import { useKubWrite } from "@/lib/kubWrite";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import toast from "react-hot-toast";
 import ThemeToggle from "./ThemeToggle";
 import { useT, LangToggle } from "@/lib/i18n";
-import { ADDR, CFG, chain, erc20Abi, tokenToUsd, usdToToken } from "@/config/contracts";
+import { ADDR, CFG, chain, erc20Abi, tokenToUsd, requestFaucet } from "@/config/contracts";
 import { shortAddr, errMsg, fmtUsd } from "@/lib/format";
 import { PRIVY_ENABLED } from "@/lib/privy";
 import PrivyConnect from "./PrivyConnect";
-import { formatEther, parseEther } from "viem";
+import { formatEther } from "viem";
 
 export default function Header() {
   const { address, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
-  const { writeContract } = useKubWrite();
   const client = usePublicClient();
   const pathname = usePathname();
   const t = useT();
@@ -38,24 +36,16 @@ export default function Header() {
   });
 
   const faucet = async () => {
-    if (!address) return toast.error("Connect wallet first");
-    try {
-      const hash = await writeContract({
-        address: ADDR.kusdt,
-        abi: erc20Abi,
-        functionName: "mint",
-        args: [address, usdToToken(parseEther("10000"))],
-      });
-      await client!.waitForTransactionReceipt({ hash });
-      toast.success("Minted 10,000 test KUSDT");
-    } catch (e) {
-      const msg = errMsg(e);
-      toast.error(
-        /enough funds|insufficient funds/i.test(msg)
-          ? "Mint failed — wallet has no KUB for gas on this chain\n" + msg
-          : "Mint failed (note: mainnet KUSDT has no faucet)\n" + msg,
-      );
-    }
+    if (!address) return toast.error(t("toast.connectFirst"));
+    // Keeper faucet: sends tKUB (gas) + mints 10k test KUSDT, no user gas needed —
+    // so it works even for email/embedded wallets that start with 0 KUB.
+    const p = requestFaucet(address);
+    toast.promise(p, {
+      loading: t("faucet.loading"),
+      success: t("faucet.success"),
+      error: t("faucet.error"),
+    });
+    await p;
   };
 
   return (
@@ -86,10 +76,11 @@ export default function Header() {
       <LangToggle />
       <ThemeToggle />
       <button
+        title={t("faucet.button")}
         onClick={faucet}
         className="rounded-md border border-line px-3 py-2 text-[12px] text-muted transition-colors hover:border-accent/40 hover:text-fg"
       >
-        Faucet
+        {t("faucet.button")}
       </button>
       {isConnected && address ? (
         <>

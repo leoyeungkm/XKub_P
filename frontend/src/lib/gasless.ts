@@ -80,6 +80,10 @@ export async function submitGaslessOrder(params: {
       sig,
     }),
   });
+  // 409 "duplicate" = this owner-nonce is already being processed — i.e. our
+  // earlier attempt WAS accepted (the client just timed out waiting). Treat it
+  // as submitted; position polling confirms the outcome.
+  if (res.status === 409) return "duplicate-in-flight";
   if (!res.ok) {
     const j = await res.json().catch(() => ({}));
     throw new Error(j.error ?? `relayer ${res.status}`);

@@ -54,6 +54,7 @@ const en: Record<string, string> = {
   "onb.skipDeposit": "Skip deposit, just set up the account",
   "onb.setupNote": "Authorise agent, deposit and generate a referral code in one transaction. Trading gas is covered by the platform. A one-time KUSDT approval is needed the first time.",
   "onb.switching": "Switching network…",
+  "onb.switchFailed": "Please switch your wallet to KUB testnet and try again",
   "onb.approving": "Approving KUSDT…",
   "onb.setupDone": "Setup complete — start trading",
   // trade panel
@@ -285,6 +286,7 @@ const zh: Record<string, string> = {
   "onb.skipDeposit": "暫不入金,只設定帳戶",
   "onb.setupNote": "授權代理、入金、生成邀請碼一筆交易完成。交易 gas 由平台代付,你唔使入 KUB。首次需額外一次 KUSDT 授權(approve)。",
   "onb.switching": "切換網絡…",
+  "onb.switchFailed": "請喺錢包切換到 KUB 測試網後再試",
   "onb.approving": "授權 KUSDT…",
   "onb.setupDone": "設定完成,開始交易",
   "trade.buyLong": "買入 / 做多",

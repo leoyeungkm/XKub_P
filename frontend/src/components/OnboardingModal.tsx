@@ -7,7 +7,7 @@
 //      the first time. 1–2 popups total instead of 4–6.
 import { useEffect, useState } from "react";
 import { formatEther, parseEther } from "viem";
-import { useAccount, useBalance, useChainId, usePublicClient, useReadContract, useSwitchChain, useWriteContract } from "wagmi";
+import { useAccount, useBalance, usePublicClient, useReadContract, useSwitchChain, useWriteContract } from "wagmi";
 import toast from "react-hot-toast";
 import { ADDR, b32, chain, erc20Abi, kubTxOverrides, referralAbi, routerAbi, tokenToUsd, usdToToken } from "@/config/contracts";
 import { errMsg, fmtNum } from "@/lib/format";
@@ -22,10 +22,13 @@ const clean = (s: string) => s.toUpperCase().replace(/[^A-Z0-9_]/g, "").slice(0,
 const ZERO32 = "0x0000000000000000000000000000000000000000000000000000000000000000" as const;
 
 export default function OnboardingModal() {
-  const { address } = useAccount();
+  // NOTE: useChainId() always returns the config chain on a single-chain config —
+  // the wallet's REAL network is useAccount().chainId. Using the wrong one made
+  // the switch-guard a no-op for users whose wallet sat on another chain, so
+  // their approve went to the wrong network and the flow stalled.
+  const { address, chainId: walletChainId } = useAccount();
   const client = usePublicClient();
   const { writeContractAsync } = useWriteContract();
-  const walletChainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
   const oc = useOneClick();
   const t = useT();
@@ -103,9 +106,9 @@ export default function OnboardingModal() {
       if (walletChainId !== chain.id) {
         toast(t("onb.switching"));
         try {
-          await switchChainAsync({ chainId: chain.id });
+          await switchChainAsync({ chainId: chain.id }); // auto-adds the chain if the wallet lacks it
         } catch {
-          throw new Error(`請喺錢包切換到 ${chain.name}（chainId ${chain.id}）後再試`);
+          throw new Error(`${t("onb.switchFailed")} (${chain.name}, chainId ${chain.id})`);
         }
       }
 
@@ -132,7 +135,7 @@ export default function OnboardingModal() {
           toast(t("onb.approving"));
           const h = await writeContractAsync({
             address: ADDR.kusdt, abi: erc20Abi, functionName: "approve", args: [ADDR.router, 2n ** 256n - 1n],
-            ...fees, gas: 80_000n, // explicit limit — stops MetaMask padding it and over-quoting the cost
+            ...fees, gas: 80_000n, chainId: chain.id, // explicit limit — stops MetaMask padding it and over-quoting the cost
           });
           await client.waitForTransactionReceipt({ hash: h, timeout: 90_000 });
         }
@@ -146,7 +149,7 @@ export default function OnboardingModal() {
       const h = await writeContractAsync({
         address: ADDR.router, abi: routerAbi, functionName: "setupAccount",
         args: [agent.address, tokens, code], value: 0n, ...fees,
-        gas: 450_000n, // explicit limit — stops MetaMask padding it and over-quoting the cost
+        gas: 450_000n, chainId: chain.id, // explicit limit — stops MetaMask padding it and over-quoting the cost
       });
       await client.waitForTransactionReceipt({ hash: h, timeout: 90_000 });
       toast.success(t("onb.setupDone"));

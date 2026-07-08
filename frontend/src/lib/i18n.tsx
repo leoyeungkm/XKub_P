@@ -571,13 +571,16 @@ const zh: Record<string, string> = {
 const dict: Record<Lang, Record<string, string>> = { en, zh };
 
 type Ctx = { lang: Lang; setLang: (l: Lang) => void; t: (k: string) => string };
-const I18nCtx = createContext<Ctx>({ lang: "zh", setLang: () => {}, t: (k) => k });
+const I18nCtx = createContext<Ctx>({ lang: "en", setLang: () => {}, t: (k) => k });
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>("zh");
+  // English-first: default en, honour a saved choice, else fall to zh only for
+  // Chinese-locale browsers.
+  const [lang, setLangState] = useState<Lang>("en");
   useEffect(() => {
     const s = localStorage.getItem(STORE);
-    if (s === "en" || s === "zh") setLangState(s);
+    if (s === "en" || s === "zh") { setLangState(s); return; }
+    if (typeof navigator !== "undefined" && navigator.language?.toLowerCase().startsWith("zh")) setLangState("zh");
   }, []);
   const setLang = (l: Lang) => { setLangState(l); try { localStorage.setItem(STORE, l); } catch { /* ignore */ } };
   const t = (k: string) => dict[lang][k] ?? en[k] ?? k;

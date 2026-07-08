@@ -9,6 +9,7 @@ import { useKubWrite } from "@/lib/kubWrite";
 import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
 import type { PositionRow } from "@/lib/portfolio";
+import { useT } from "@/lib/i18n";
 
 const TP_PRESETS = [25, 50, 100, 200, 300];   // profit % of collateral
 const SL_PRESETS = [10, 30, 50, 70];           // loss % of collateral
@@ -18,6 +19,7 @@ export default function TpSlModal({ pos, onClose }: { pos: PositionRow; onClose:
   const client = usePublicClient();
   const { writeContract } = useKubWrite();
   const oneClick = useOneClick();
+  const t = useT();
 
   const entry = Number(formatEther(pos.entry));
   const mark = pos.mark > 0n ? Number(formatEther(pos.mark)) : entry;
@@ -127,7 +129,7 @@ export default function TpSlModal({ pos, onClose }: { pos: PositionRow; onClose:
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-[420px] overflow-hidden rounded-xl border border-line bg-panel shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-line bg-panel2 px-5 py-3.5">
-          <span className="text-[14px] font-semibold">倉位止盈止損 · TP / SL</span>
+          <span className="text-[14px] font-semibold">{t("tpsl.title")}</span>
           <button onClick={onClose} className="text-muted hover:text-fg">✕</button>
         </div>
 
@@ -136,21 +138,21 @@ export default function TpSlModal({ pos, onClose }: { pos: PositionRow; onClose:
           <div className="flex items-center gap-2 text-[13px]">
             <span className="font-medium">{pos.symbol}-PERP</span>
             <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${pos.isLong ? "bg-greenDim text-green" : "bg-redDim text-red"}`}>
-              {pos.isLong ? "做多" : "做空"} {lev.toFixed(0)}x
+              {pos.isLong ? t("trade.long") : t("trade.short")} {lev.toFixed(0)}x
             </span>
-            <span className="eyebrow !tracking-normal text-mutedDim">逐倉</span>
+            <span className="eyebrow !tracking-normal text-mutedDim">{t("pos.isolated")}</span>
           </div>
           <div className="grid grid-cols-2 gap-2 text-[12px]">
-            <Info k="開倉價格" v={`$${fmtPrice(pos.entry)}`} />
-            <Info k="當前價格" v={pos.mark > 0n ? `$${fmtPrice(pos.mark)}` : "—"} />
+            <Info k={t("pos.h.entry")} v={`$${fmtPrice(pos.entry)}`} />
+            <Info k={t("pos.h.mark")} v={pos.mark > 0n ? `$${fmtPrice(pos.mark)}` : "—"} />
           </div>
 
           {/* TP */}
           <div className="flex flex-col gap-2 rounded-md border border-line bg-bg p-3">
             <div className="flex justify-between text-[12px]">
-              <span className="eyebrow">倉位止盈 · Take Profit</span>
+              <span className="eyebrow">{t("tpsl.tp")}</span>
               <span className={`tnum ${estProfit > 0 ? "text-green" : "text-mutedDim"}`}>
-                預估盈利 {estProfit > 0 ? `$${fmtNum(estProfit)}` : "$0.00"}
+                {t("tpsl.estProfit")} {estProfit > 0 ? `$${fmtNum(estProfit)}` : "$0.00"}
               </span>
             </div>
             <div className="flex items-center rounded-md border border-line bg-panel px-3 focus-within:border-accent/60">
@@ -172,9 +174,9 @@ export default function TpSlModal({ pos, onClose }: { pos: PositionRow; onClose:
           {/* SL */}
           <div className="flex flex-col gap-2 rounded-md border border-line bg-bg p-3">
             <div className="flex justify-between text-[12px]">
-              <span className="eyebrow">倉位止損 · Stop Loss</span>
+              <span className="eyebrow">{t("tpsl.sl")}</span>
               <span className={`tnum ${estLoss < 0 ? "text-red" : "text-mutedDim"}`}>
-                預估虧損 {estLoss < 0 ? `$${fmtNum(estLoss)}` : "$0.00"}
+                {t("tpsl.estLoss")} {estLoss < 0 ? `$${fmtNum(estLoss)}` : "$0.00"}
               </span>
             </div>
             <div className="flex items-center rounded-md border border-line bg-panel px-3 focus-within:border-accent/60">
@@ -192,26 +194,26 @@ export default function TpSlModal({ pos, onClose }: { pos: PositionRow; onClose:
               ))}
               <button onClick={() => setSl("")}
                 className="tnum rounded bg-panel2 py-1.5 text-[11px] text-muted transition-colors hover:text-fg">
-                無
+                {t("trade.none")}
               </button>
             </div>
           </div>
 
           <p className="text-[11px] leading-relaxed text-mutedDim">
-            止盈/止損套用於整個倉位，到價時由 keeper 以新鮮預言機價自動平倉，平倉後自動取消。
-            設定需付 {minExecFee !== undefined ? formatEther(minExecFee) : "—"} KUB 執行費（取消時退回）。
+            {t("tpsl.note")}
+            {t("tpsl.feeNotePre")}{minExecFee !== undefined ? formatEther(minExecFee) : "—"}{t("tpsl.feeNoteSuf")}
           </p>
 
           <div className="flex gap-2">
             {hasExisting && (
               <button onClick={cancel} disabled={busy}
                 className="rounded-md border border-line px-4 py-2.5 text-[13px] font-medium text-muted transition-colors hover:border-red/50 hover:text-red disabled:opacity-40">
-                取消
+                {t("common.cancel")}
               </button>
             )}
             <button onClick={save} disabled={busy}
               className="flex-1 rounded-md bg-accent py-2.5 text-[14px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40">
-              {busy ? "儲存中…" : "儲存 TP/SL"}
+              {busy ? t("tpsl.saving") : t("tpsl.save")}
             </button>
           </div>
         </div>

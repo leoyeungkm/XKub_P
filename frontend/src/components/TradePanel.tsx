@@ -210,7 +210,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
     <div className="overflow-hidden rounded-lg border border-line bg-panel">
       {/* header: margin mode + leverage (click to set) + order type */}
       <div className="flex items-center gap-2 border-b border-line px-3.5 py-2.5">
-        <span className="rounded bg-panel2 px-2 py-1 text-[11px] font-medium">逐倉 Isolated</span>
+        <span className="rounded bg-panel2 px-2 py-1 text-[11px] font-medium">{t("pos.isolated")}</span>
         <div ref={levRef} className="relative">
           <button
             onClick={() => setLevOpen((v) => !v)}
@@ -337,7 +337,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
                   <button
                     key={r}
                     onClick={() => { setMode("size"); setUnit("usd"); setAmount(String(pos)); }}
-                    title={`${fmtNum(pos)} USD 倉位`}
+                    title={`${fmtNum(pos)} USD`}
                     className="tnum rounded bg-panel2 py-1.5 text-[11.5px] text-muted transition-colors hover:text-fg"
                   >
                     {fmtK(pos)}
@@ -346,7 +346,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
               })}
               <button
                 onClick={() => { setMode("size"); setUnit("usd"); setAmount(String(niceFloor(maxLongUsd))); }}
-                title={`Max ${fmtNum(niceFloor(maxLongUsd))} USD 倉位`}
+                title={`Max ${fmtNum(niceFloor(maxLongUsd))} USD`}
                 className="tnum rounded bg-panel2 py-1.5 text-[11.5px] text-accent transition-colors hover:opacity-80"
               >
                 Max
@@ -385,7 +385,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
 
         {oppositeOpen && (
           <div className="rounded-md border border-red/40 bg-redDim/50 px-3 py-2 text-[11.5px] leading-relaxed text-red">
-            你已持有 {symbol} 嘅{isLong ? "空" : "多"}倉。一個市場只可單邊持倉——請先平掉反方向倉位。
+            {t("trade.oppositeFull").replace("{sym}", symbol).replace("{side}", t(isLong ? "side.short" : "side.long"))}
           </div>
         )}
         <button

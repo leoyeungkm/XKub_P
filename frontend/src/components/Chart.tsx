@@ -11,6 +11,7 @@ import { formatEther } from "viem";
 import { useAccount, usePublicClient, useReadContracts } from "wagmi";
 import { ADDR, parseB32, routerAbi, triggerKey } from "@/config/contracts";
 import { useIsLight } from "@/lib/theme";
+import { useT } from "@/lib/i18n";
 import { usePositions } from "@/lib/portfolio";
 import { useLivePrices } from "@/lib/cexPrice";
 
@@ -46,6 +47,7 @@ async function fetchKlines(symbol: string): Promise<CandlestickData[]> {
 
 export default function Chart({ symbol, height = 460 }: { symbol: string; height?: number }) {
   const light = useIsLight();
+  const t = useT();
   const { address } = useAccount();
   const client = usePublicClient();
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -169,9 +171,9 @@ export default function Chart({ symbol, height = 460 }: { symbol: string; height
   return (
     <div className="flex flex-col overflow-hidden rounded-lg border border-line bg-panel" style={{ height }}>
       <div className="flex items-center gap-1 border-b border-line px-2.5 py-1.5">
-        <Toggle on={toggles.entry} onClick={() => flip("entry")} dot="#16b979">進場價</Toggle>
+        <Toggle on={toggles.entry} onClick={() => flip("entry")} dot="#16b979">{t("chart.entry")}</Toggle>
         <Toggle on={toggles.tpsl} onClick={() => flip("tpsl")} dot="#ef4b64">TP/SL</Toggle>
-        <Toggle on={toggles.orders} onClick={() => flip("orders")} dot="#4f7cff">掛單</Toggle>
+        <Toggle on={toggles.orders} onClick={() => flip("orders")} dot="#4f7cff">{t("chart.orders")}</Toggle>
         <span className="ml-auto text-[11px] text-mutedDim">{symbol}-PERP · 15m</span>
       </div>
       <div ref={wrapRef} className="min-h-0 flex-1" />

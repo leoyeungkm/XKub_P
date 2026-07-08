@@ -149,7 +149,7 @@ export default function ActivityPanel() {
 
 // ─── Positions ─────────────────────────────────────────────────────────────
 
-const HEAD = ["幣種", "數量", "方向", "倉位價值", "開倉價格", "當前價格", "初始保證金", "倉位盈虧 (回報率)", "預估強平價", "止盈/止損", ""];
+const HEAD_KEYS = ["pos.h.market", "pos.h.size", "pos.h.side", "pos.h.value", "pos.h.entry", "pos.h.mark", "pos.h.margin", "pos.h.pnl", "pos.h.liq", "pos.h.tpsl", ""];
 
 function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[]; pending: PendingOpen[]; onClose: (p: PositionRow) => void; closing: Record<string, boolean> }) {
   const { address } = useAccount();
@@ -178,7 +178,7 @@ function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[
         <td className="tnum px-3 py-2.5">—</td>
         <td className="px-3 py-2.5">
           <span className={`tnum w-fit rounded px-1.5 py-0.5 text-[11px] font-medium ${pp.isLong ? "bg-greenDim text-green" : "bg-redDim text-red"}`}>
-            {pp.isLong ? "做多" : "做空"} {lev.toFixed(0)}x
+            {pp.isLong ? t("trade.long") : t("trade.short")} {lev.toFixed(0)}x
           </span>
         </td>
         <td className="tnum px-3 py-2.5">{fmtUsd(pp.sizeUsd)} USD</td>
@@ -206,7 +206,7 @@ function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[
         </colgroup>
         <thead>
           <tr className="eyebrow text-left">
-            {HEAD.map((h) => <th key={h} className="whitespace-nowrap border-b border-line px-3 py-2 font-normal">{h}</th>)}
+            {HEAD_KEYS.map((h, i) => <th key={i} className="whitespace-nowrap border-b border-line px-3 py-2 font-normal">{h ? t(h) : ""}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -227,9 +227,9 @@ function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[
                 <td className="px-3 py-2.5">
                   <div className="flex flex-col gap-1">
                     <span className={`tnum w-fit rounded px-1.5 py-0.5 text-[11px] font-medium ${p.isLong ? "bg-greenDim text-green" : "bg-redDim text-red"}`}>
-                      {p.isLong ? "做多" : "做空"} {lev.toFixed(0)}x
+                      {p.isLong ? t("trade.long") : t("trade.short")} {lev.toFixed(0)}x
                     </span>
-                    <span className="eyebrow !tracking-normal text-mutedDim">逐倉 Isolated</span>
+                    <span className="eyebrow !tracking-normal text-mutedDim">{t("pos.isolated")}</span>
                   </div>
                 </td>
                 <td className="tnum px-3 py-2.5">{fmtUsd(p.sizeUsd)} USD</td>
@@ -242,7 +242,7 @@ function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[
                 <td className="tnum px-3 py-2.5">{lev > 1 ? `$${fmtNum(liq, liq >= 100 ? 1 : 4)}` : "—"}</td>
                 <td className="px-3 py-2.5">
                   {trig ? (
-                    <button onClick={() => setTpsl(p)} className="flex flex-col gap-0.5 text-left transition-opacity hover:opacity-80" title="編輯 TP/SL">
+                    <button onClick={() => setTpsl(p)} className="flex flex-col gap-0.5 text-left transition-opacity hover:opacity-80" title={t("pos.editTpSl")}>
                       <span className="tnum text-[11px] text-green">
                         TP {trig.tp > 0n ? `$${fmtPrice(trig.tp)}` : "—"}
                       </span>
@@ -307,7 +307,7 @@ function usePendingOrders() {
     try {
       const hash = await writeContract({ address: ADDR.router, abi: routerAbi, functionName: "cancelRequest", args: [id] });
       await client.waitForTransactionReceipt({ hash });
-      toast.success("已取消並退款");
+      toast.success(t("ord.cancelled"));
       refetch();
     } catch (e) {
       toast.error(errMsg(e));
@@ -318,13 +318,14 @@ function usePendingOrders() {
 }
 
 function OrdersView({ rows, onCancel }: { rows: ReturnType<typeof usePendingOrders>["rows"]; onCancel: (id: bigint) => void }) {
+  const t = useT();
   if (rows.length === 0) return <Empty>No pending orders</Empty>;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-[12.5px]">
         <thead>
           <tr className="eyebrow text-left">
-            {["#", "類型", "幣種", "方向", "數量", "狀態", ""].map((h) => (
+            {["#", t("ord.h.type"), t("pos.h.market"), t("pos.h.side"), t("pos.h.size"), t("ord.h.status"), ""].map((h, i) => (
               <th key={h} className="border-b border-line px-3 py-2 font-normal">{h}</th>
             ))}
           </tr>
@@ -333,18 +334,18 @@ function OrdersView({ rows, onCancel }: { rows: ReturnType<typeof usePendingOrde
           {rows.map((r) => (
             <tr key={String(r.id)} className="border-b border-lineSoft last:border-0 hover:bg-panel2/40">
               <td className="tnum px-3 py-2.5 text-muted">{String(r.id)}</td>
-              <td className="px-3 py-2.5">{r.isIncrease ? "開倉" : "平倉"}</td>
+              <td className="px-3 py-2.5">{r.isIncrease ? t("ord.open") : t("ord.close")}</td>
               <td className="px-3 py-2.5 font-medium">{r.symbol}-PERP</td>
               <td className="px-3 py-2.5">
                 <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${r.isLong ? "bg-greenDim text-green" : "bg-redDim text-red"}`}>
-                  {r.isLong ? "做多" : "做空"}
+                  {r.isLong ? t("trade.long") : t("trade.short")}
                 </span>
               </td>
               <td className="tnum px-3 py-2.5">{fmtUsd(r.sizeDeltaUsd, 0)} USD</td>
-              <td className="px-3 py-2.5 text-accent">等待執行</td>
+              <td className="px-3 py-2.5 text-accent">{t("ord.pending")}</td>
               <td className="px-3 py-2.5 text-right">
                 <button onClick={() => onCancel(r.id)} className="rounded border border-line px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-red/50 hover:text-red">
-                  取消
+                  {t("common.cancel")}
                 </button>
               </td>
             </tr>
@@ -365,9 +366,10 @@ const fmtTime = (ts?: number) => {
 };
 
 function HistoryView({ rows }: { rows: HistoryItem[] }) {
+  const t = useT();
   const trades = rows.filter((h) => h.kind === "open" || h.kind === "close" || h.kind === "liquidation");
   if (trades.length === 0) return <Empty>No trade history yet</Empty>;
-  const HEAD = ["時間", "幣種", "數量", "方向", "價格", "成交價值", "初始保證金", "費用", "倉位盈虧", "已實現盈虧", "TXN"];
+  const HEAD = [t("hist.h.time"), t("pos.h.market"), t("pos.h.size"), t("pos.h.side"), t("hist.h.price"), t("hist.h.value"), t("pos.h.margin"), t("hist.h.fee"), t("hist.h.pnl"), t("hist.h.realized"), "TXN"];
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[840px] text-[12.5px]">
@@ -378,8 +380,8 @@ function HistoryView({ rows }: { rows: HistoryItem[] }) {
         </thead>
         <tbody>
           {trades.map((h, i) => {
-            const action = h.kind === "open" ? "開" : h.kind === "close" ? "平" : "強平";
-            const dir = h.isLong === undefined ? "" : h.isLong ? "多" : "空";
+            const kindKey = h.kind === "open" ? "Open" : h.kind === "close" ? "Close" : "Liq";
+            const label = h.isLong === undefined ? "" : t(`hist.${kindKey.toLowerCase()}${h.isLong ? "Long" : "Short"}`);
             const tokens = h.sizeUsd && h.price && h.price > 0n
               ? Number(formatEther(h.sizeUsd)) / Number(formatEther(h.price)) : null;
             const realized = h.kind === "close" && h.pnlUsd !== undefined
@@ -392,7 +394,7 @@ function HistoryView({ rows }: { rows: HistoryItem[] }) {
                 <td className="px-3 py-2.5 font-medium">{h.symbol}-PERP</td>
                 <td className="tnum px-3 py-2.5">{tokens !== null ? fmtNum(tokens, 4) : "—"}</td>
                 <td className="whitespace-nowrap px-3 py-2.5">
-                  <span className={`${h.isLong ? "text-green" : "text-red"}`}>{action}{dir}</span>
+                  <span className={`${h.isLong ? "text-green" : "text-red"}`}>{label}</span>
                 </td>
                 <td className="tnum px-3 py-2.5">{h.price ? `$${fmtPrice(h.price)}` : "—"}</td>
                 <td className="tnum px-3 py-2.5">{h.sizeUsd ? `${fmtUsd(h.sizeUsd)} USD` : "—"}</td>

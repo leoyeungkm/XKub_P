@@ -1,0 +1,12 @@
+# Caddy reverse proxy: gives the relayer a public HTTPS URL with an auto-renewed
+# TLS cert (needed because the Vercel frontend is HTTPS and can't call http://).
+#   1. Point a DNS A record  relayer.yourdomain.com -> your VPS IP
+#   2. Edit the domain below
+#   3. sudo caddy run --config deploy/Caddyfile   (or: caddy start)
+#
+# The relayer already sends `Access-Control-Allow-Origin: *`, so no extra CORS
+# config is needed here.
+
+relayer.yourdomain.com {
+    reverse_proxy 127.0.0.1:8799
+}

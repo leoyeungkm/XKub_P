@@ -129,15 +129,22 @@ export const RELAYER_URL = (CFG as { relayerUrl?: string }).relayerUrl ?? "";
 // Testnet faucet (keeper endpoint): drip tKUB for gas + mint test KUSDT, once per
 // address. Lets email/embedded-wallet users onboard without an external faucet.
 export const FAUCET_URL = RELAYER_URL ? RELAYER_URL.replace(/\/order\/?$/, "/faucet") : "";
-export async function requestFaucet(address: string): Promise<boolean> {
-  if (!FAUCET_URL) return false;
+export type FaucetResult = "sent" | "already" | "rate-limited" | "empty" | "error";
+export async function requestFaucet(address: string): Promise<FaucetResult> {
+  if (!FAUCET_URL) return "error";
   try {
     const r = await fetch(FAUCET_URL, {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ address }), signal: AbortSignal.timeout(30000),
     });
-    return r.ok || r.status === 429; // 429 = already funded before
-  } catch { return false; }
+    if (r.ok) return "sent";
+    const j = await r.json().catch(() => ({} as { error?: string }));
+    // Distinguish "this address was already funded" (fine — carry on) from
+    // "the IP is rate-limited" (this address got NOTHING; don't pretend it did).
+    if (r.status === 429) return j.error === "already claimed" ? "already" : "rate-limited";
+    if (r.status === 503) return "empty";
+    return "error";
+  } catch { return "error"; }
 }
 
 // KUB Chain has NO EIP-1559 — its blocks carry no baseFeePerGas. Wallets like

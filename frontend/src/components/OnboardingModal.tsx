@@ -12,7 +12,7 @@ import toast from "react-hot-toast";
 import { ADDR, b32, chain, erc20Abi, kubTxOverrides, referralAbi, routerAbi, tokenToUsd, usdToToken } from "@/config/contracts";
 import { errMsg, fmtNum } from "@/lib/format";
 import { ensureAgentAccount, useOneClick } from "@/lib/oneclick";
-import { useFaucet } from "@/lib/faucet";
+import { useFaucet, FaucetError } from "@/lib/faucet";
 import { useT } from "@/lib/i18n";
 
 const seenKey = (o: string) => `xkub.onboard.${o.toLowerCase()}`;
@@ -32,7 +32,11 @@ export default function OnboardingModal() {
 
   const getFaucet = async () => {
     if (!address) return;
-    await toast.promise(runFaucet(), { loading: t("faucet.loading"), success: t("faucet.success"), error: t("faucet.error") });
+    await toast.promise(runFaucet(), {
+      loading: t("faucet.loading"), success: t("faucet.success"),
+      error: (e) => t(e instanceof FaucetError && e.kind === "rate-limited" ? "faucet.rateLimited"
+        : e instanceof FaucetError && e.kind === "empty" ? "faucet.empty" : "faucet.error"),
+    }).catch(() => {});
     refetchWallet();
   };
 

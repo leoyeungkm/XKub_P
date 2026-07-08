@@ -20,6 +20,8 @@ const en: Record<string, string> = {
   "faucet.loading": "Sending test KUB + KUSDT…",
   "faucet.success": "Test KUB + 10,000 KUSDT sent",
   "faucet.error": "Faucet unavailable — try again later",
+  "faucet.rateLimited": "Too many claims from your network — try again in a few hours",
+  "faucet.empty": "Faucet is out of test KUB — please try again later",
   // onboarding
   "onb.getStarted": "Get Started",
   "onb.title": "Get Started",
@@ -240,6 +242,8 @@ const zh: Record<string, string> = {
   "faucet.loading": "發送測試 KUB + KUSDT…",
   "faucet.success": "已發送測試 KUB + 10,000 KUSDT",
   "faucet.error": "水龍頭暫時未能處理 — 請稍後再試",
+  "faucet.rateLimited": "你嘅網絡領取次數太多 — 請幾小時後再試",
+  "faucet.empty": "水龍頭測試 KUB 已用完 — 請稍後再試",
   "onb.getStarted": "開始",
   "onb.title": "開始交易",
   "onb.testnet": "🧪 測試網 — 資金為測試幣,無實際價值。缺 gas 或 KUSDT?下方免費領取。",

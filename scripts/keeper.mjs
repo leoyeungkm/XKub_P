@@ -41,9 +41,12 @@ const TX = () => ({ type: 0, gasPrice: GAS_PRICE });
 // once per address. In-memory guard (resets on redeploy — fine for a demo).
 const FAUCET_KUB = ethers.parseEther(process.env.FAUCET_KUB ?? "0.05"); // enough for the setup owner tx
 const FAUCET_RESERVE = ethers.parseEther(process.env.FAUCET_RESERVE ?? "1"); // keeper always keeps this for its own ops
-const IP_COOLDOWN_MS = Number(process.env.FAUCET_IP_COOLDOWN_MS ?? 6 * 3600 * 1000); // 6h per IP
+// Per-IP window: mobile-carrier NAT / offices share one IP across many users, so
+// a hard 1-per-IP lockout blocks legitimate new users. Allow a few per window.
+const IP_WINDOW_MS = Number(process.env.FAUCET_IP_WINDOW_MS ?? 6 * 3600 * 1000); // 6h window
+const IP_MAX_CLAIMS = Number(process.env.FAUCET_IP_MAX ?? 3);                    // claims per IP per window
 const faucetClaimed = new Set(); // per-address (in-memory; resets on redeploy)
-const faucetIps = new Map();      // ip -> last-claim ms
+const faucetIps = new Map();      // ip -> array of claim timestamps (ms)
 
 async function fetchJson(url) {
   const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
@@ -233,14 +236,14 @@ function startRelayer(router, oracle, maxDeviationBps) {
           const addr = ethers.getAddress(address);
           const ip = (String(req.headers["x-forwarded-for"] || "").split(",")[0] || req.socket.remoteAddress || "").trim();
           if (faucetClaimed.has(addr.toLowerCase())) { res.writeHead(429); return res.end(JSON.stringify({ error: "already claimed" })); }
-          const lastIp = ip ? (faucetIps.get(ip) || 0) : 0;
-          if (ip && Date.now() - lastIp < IP_COOLDOWN_MS) { res.writeHead(429); return res.end(JSON.stringify({ error: "rate limited — try later" })); }
+          const stamps = (ip ? faucetIps.get(ip) ?? [] : []).filter((t) => Date.now() - t < IP_WINDOW_MS);
+          if (ip && stamps.length >= IP_MAX_CLAIMS) { res.writeHead(429); return res.end(JSON.stringify({ error: "rate limited" })); }
           // Keep enough KUB for the keeper's own operations (never drain past reserve).
           if (await provider.getBalance(keeper.address) < FAUCET_KUB + FAUCET_RESERVE) {
             res.writeHead(503); return res.end(JSON.stringify({ error: "faucet empty" }));
           }
           faucetClaimed.add(addr.toLowerCase());
-          if (ip) faucetIps.set(ip, Date.now());
+          if (ip) faucetIps.set(ip, [...stamps, Date.now()]);
           // Send tKUB only (a single reliable transfer). Test KUSDT is minted by
           // the user's own wallet from the frontend (mint is open) — that avoids
           // nonce races with the keeper's price-posting txs.

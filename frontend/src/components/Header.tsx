@@ -10,7 +10,7 @@ import toast from "react-hot-toast";
 import ThemeToggle from "./ThemeToggle";
 import { useT, LangToggle } from "@/lib/i18n";
 import { ADDR, CFG, chain, erc20Abi, tokenToUsd } from "@/config/contracts";
-import { useFaucet } from "@/lib/faucet";
+import { useFaucet, FaucetError } from "@/lib/faucet";
 import { shortAddr, errMsg, fmtUsd } from "@/lib/format";
 import { PRIVY_ENABLED } from "@/lib/privy";
 import PrivyConnect from "./PrivyConnect";
@@ -42,7 +42,8 @@ export default function Header() {
     toast.promise(runFaucet(), {
       loading: t("faucet.loading"),
       success: t("faucet.success"),
-      error: t("faucet.error"),
+      error: (e) => t(e instanceof FaucetError && e.kind === "rate-limited" ? "faucet.rateLimited"
+        : e instanceof FaucetError && e.kind === "empty" ? "faucet.empty" : "faucet.error"),
     });
   };
 

@@ -5,12 +5,14 @@ import { useAccount } from "wagmi";
 import { fmtUsd, shortAddr } from "@/lib/format";
 import { tokenToUsd } from "@/config/contracts";
 import { useOneClickActions } from "@/lib/oneclickActions";
+import { useT } from "@/lib/i18n";
 
 // Trade-page widget: status + gas top-up + disable. Enabling is driven by the
 // onboarding modal; collateral deposit/withdraw lives in Portfolio.
 export default function OneClickPanel() {
   const oc = useOneClickActions();
   const { connector } = useAccount();
+  const t = useT();
 
   // Privy embedded wallets already sign silently — the agent key only helps
   // external wallets that pop a confirmation per tx.
@@ -47,13 +49,13 @@ export default function OneClickPanel() {
         ) : (
           <>
             <p className="text-[12px] leading-relaxed text-muted">
-              一鍵交易已啟用 —— 交易 gas 由平台代付,你唔使入 gas。入金到 Trading balance 即可交易。
+              {t("oc.enabledNote")}
             </p>
             <div className="flex items-center gap-3 text-[11px]">
-              <Link href="/portfolio" className="text-accent hover:opacity-80">入金 →</Link>
+              <Link href="/portfolio" className="text-accent hover:opacity-80">{t("oc.depositArrow")}</Link>
               <div className="flex-1" />
               <button onClick={oc.disable} disabled={oc.busy} className="text-mutedDim transition-colors hover:text-red disabled:opacity-40">
-                停用
+                {t("common.disable")}
               </button>
             </div>
           </>

@@ -12,6 +12,7 @@ import { getAgentClients, useOneClick } from "@/lib/oneclick";
 import { gaslessAvailable, submitGaslessOrder } from "@/lib/gasless";
 import { usePositions, useHistory, refreshPositions, type PositionRow, type HistoryItem } from "@/lib/portfolio";
 import { usePendingOpens, removePendingOpen, type PendingOpen } from "@/lib/optimistic";
+import { useT } from "@/lib/i18n";
 import TpSlModal from "./TpSlModal";
 
 type Tab = "positions" | "orders" | "history";
@@ -19,6 +20,7 @@ type Tab = "positions" | "orders" | "history";
 export default function ActivityPanel() {
   const { address } = useAccount();
   const client = usePublicClient();
+  const t = useT();
   const { writeContract } = useKubWrite();
   const oneClick = useOneClick();
   const positions = usePositions();
@@ -74,7 +76,7 @@ export default function ActivityPanel() {
           await new Promise((r) => setTimeout(r, 1500)); // let nonce/price settle
           await gasless(); // throws to the outer catch if it still fails
         }
-        toast.success("Close submitted (gasless)");
+        toast.success(t("toast.closeSubmitted"));
         refreshPositions();
         return;
       }
@@ -85,7 +87,7 @@ export default function ActivityPanel() {
           args: [address, b32(p.symbol), p.isLong, p.sizeUsd, acceptable], value: fee,
         });
         await client.waitForTransactionReceipt({ hash });
-        toast.success("Close queued (1-click)");
+        toast.success(t("toast.closeQueued"));
         refreshPositions();
         return;
       }
@@ -94,7 +96,7 @@ export default function ActivityPanel() {
         args: [b32(p.symbol), p.isLong, p.sizeUsd, acceptable], value: fee,
       });
       await client.waitForTransactionReceipt({ hash });
-      toast.success("Close queued");
+      toast.success(t("toast.closeQueued"));
       refreshPositions();
       // leave `closing` set on success — the row disappears on the next refetch
     } catch (e) {
@@ -108,32 +110,32 @@ export default function ActivityPanel() {
   };
 
   const TABS: { id: Tab; label: string; count?: number }[] = [
-    { id: "positions", label: "持有倉位", count: positions.length + pendingToShow.length },
-    { id: "orders", label: "當前委託", count: pending.rows.length },
-    { id: "history", label: "交易歷史" },
+    { id: "positions", label: t("tab.positions"), count: positions.length + pendingToShow.length },
+    { id: "orders", label: t("tab.orders"), count: pending.rows.length },
+    { id: "history", label: t("tab.history") },
   ];
 
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-panel">
       <div className="flex items-center gap-0.5 border-b border-line px-2 pt-2">
-        {TABS.map((t) => (
+        {TABS.map((tb) => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
+            key={tb.id}
+            onClick={() => setTab(tb.id)}
             className={`flex items-center gap-1.5 rounded-t-md px-3.5 py-2 text-[13px] font-medium transition-colors ${
-              tab === t.id ? "bg-panel2 text-fg" : "text-muted hover:text-fg"
+              tab === tb.id ? "bg-panel2 text-fg" : "text-muted hover:text-fg"
             }`}
           >
-            {t.label}
-            {t.count !== undefined && t.count > 0 && (
-              <span className="tnum rounded bg-bg px-1.5 py-0.5 text-[10px]">{t.count}</span>
+            {tb.label}
+            {tb.count !== undefined && tb.count > 0 && (
+              <span className="tnum rounded bg-bg px-1.5 py-0.5 text-[10px]">{tb.count}</span>
             )}
           </button>
         ))}
         <div className="flex-1" />
         {tab === "positions" && positions.length > 0 && (
           <button onClick={closeAll} className="mb-1 mr-1 rounded border border-line px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-red/50 hover:text-red">
-            關閉全部
+            {t("pos.closeAll")}
           </button>
         )}
       </div>
@@ -151,6 +153,7 @@ const HEAD = ["幣種", "數量", "方向", "倉位價值", "開倉價格", "當
 
 function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[]; pending: PendingOpen[]; onClose: (p: PositionRow) => void; closing: Record<string, boolean> }) {
   const { address } = useAccount();
+  const t = useT();
   const [tpsl, setTpsl] = useState<PositionRow | null>(null);
 
   // Read each position's TP/SL trigger
@@ -162,8 +165,8 @@ function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[
     query: { enabled: !!address && rows.length > 0, refetchInterval: 10000 },
   });
   const trigOf = (i: number) => {
-    const t = trigData?.[i]?.result as readonly [bigint, bigint, bigint, boolean] | undefined;
-    return t && t[3] ? { tp: t[0], sl: t[1] } : null;
+    const tr = trigData?.[i]?.result as readonly [bigint, bigint, bigint, boolean] | undefined;
+    return tr && tr[3] ? { tp: tr[0], sl: tr[1] } : null;
   };
 
   if (rows.length === 0 && pending.length === 0) return <Empty>No open positions</Empty>;
@@ -185,7 +188,7 @@ function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[
         <td className="px-3 py-2.5" colSpan={4}>
           <span className="inline-flex items-center gap-1.5 rounded bg-panel2 px-2 py-0.5 text-[11px] text-accent">
             <span className="h-2.5 w-2.5 shrink-0 animate-spin rounded-full border border-accent/30 border-t-accent [animation-duration:2.5s]" />
-            確認中 · Confirming…
+            {t("pos.confirming")}
           </span>
         </td>
       </tr>
@@ -249,7 +252,7 @@ function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[
                     </button>
                   ) : (
                     <button onClick={() => setTpsl(p)} className="rounded border border-line px-2 py-1 text-[11px] text-muted transition-colors hover:border-accent/50 hover:text-accent">
-                      設定 TP/SL
+                      {t("pos.setTpSl")}
                     </button>
                   )}
                 </td>
@@ -260,7 +263,7 @@ function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[
                     className="inline-flex items-center gap-1.5 rounded border border-line px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-red/50 hover:text-red disabled:opacity-70"
                   >
                     {isClosing && <span className="h-2.5 w-2.5 shrink-0 animate-spin rounded-full border border-muted/30 border-t-muted [animation-duration:2.5s]" />}
-                    {isClosing ? "平倉中…" : "市價平倉"}
+                    {isClosing ? t("pos.closing") : t("pos.closeMarket")}
                   </button>
                 </td>
               </tr>
@@ -277,6 +280,7 @@ function PositionsView({ rows, pending, onClose, closing }: { rows: PositionRow[
 function usePendingOrders() {
   const { address } = useAccount();
   const client = usePublicClient();
+  const t = useT();
   const { writeContract } = useKubWrite();
 
   const { data: rows = [], refetch } = useQuery({

@@ -9,6 +9,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import toast from "react-hot-toast";
 import ThemeToggle from "./ThemeToggle";
+import { useT, LangToggle } from "@/lib/i18n";
 import { ADDR, CFG, chain, erc20Abi, tokenToUsd, usdToToken } from "@/config/contracts";
 import { shortAddr, errMsg, fmtUsd } from "@/lib/format";
 import { PRIVY_ENABLED } from "@/lib/privy";
@@ -22,6 +23,7 @@ export default function Header() {
   const { writeContract } = useKubWrite();
   const client = usePublicClient();
   const pathname = usePathname();
+  const t = useT();
 
   const { data: kubBal } = useBalance({
     address,
@@ -63,10 +65,10 @@ export default function Header() {
         Kub<span className="text-muted">Perp</span>
       </div>
       <nav className="flex items-center gap-0.5 text-[13px]">
-        <NavLink href="/" label="Trade" active={pathname === "/"} />
-        <NavLink href="/portfolio" label="Portfolio" active={pathname === "/portfolio"} />
-        <NavLink href="/earn" label="Earn" active={pathname === "/earn"} />
-        <NavLink href="/referral" label="Referral" active={pathname === "/referral"} />
+        <NavLink href="/" label={t("nav.trade")} active={pathname === "/"} />
+        <NavLink href="/portfolio" label={t("nav.portfolio")} active={pathname === "/portfolio"} />
+        <NavLink href="/earn" label={t("nav.earn")} active={pathname === "/earn"} />
+        <NavLink href="/referral" label={t("nav.referral")} active={pathname === "/referral"} />
       </nav>
       <div className="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[10.5px] text-muted lg:flex">
         <span className="h-1.5 w-1.5 rounded-full bg-green" />
@@ -81,6 +83,7 @@ export default function Header() {
           ⚡ 開始
         </button>
       )}
+      <LangToggle />
       <ThemeToggle />
       <button
         onClick={faucet}

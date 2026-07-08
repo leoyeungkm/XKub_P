@@ -5,6 +5,7 @@ import Providers from "@/components/Providers";
 import Header from "@/components/Header";
 import OnboardingModal from "@/components/OnboardingModal";
 import RefCapture from "@/components/RefCapture";
+import { LanguageProvider } from "@/lib/i18n";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -38,10 +39,12 @@ export default function RootLayout({
           }}
         />
         <Providers>
-          <Header />
-          {children}
-          <OnboardingModal />
-          <RefCapture />
+          <LanguageProvider>
+            <Header />
+            {children}
+            <OnboardingModal />
+            <RefCapture />
+          </LanguageProvider>
         </Providers>
       </body>
     </html>

@@ -14,6 +14,7 @@ import { useAccountSummary, refreshPositions } from "@/lib/portfolio";
 import { addPendingOpen, removePendingOpen } from "@/lib/optimistic";
 import { useMarketFees, useMyFee, useOraclePrice } from "./MarketBar";
 import { useDisplayPrice } from "@/lib/cexPrice";
+import { useT } from "@/lib/i18n";
 
 const SLIPPAGE_OPTS = [
   { label: "0.3%", bps: 30n },
@@ -37,6 +38,7 @@ const fmtK = (n: number) =>
 export default function TradePanel({ symbol }: { symbol: string }) {
   const { address } = useAccount();
   const client = usePublicClient();
+  const t = useT();
   const oraclePrice = useOraclePrice(symbol);
   const price = useDisplayPrice(symbol, oraclePrice); // live CEX for preview, oracle fallback
   const fees = useMarketFees(symbol);
@@ -115,8 +117,8 @@ export default function TradePanel({ symbol }: { symbol: string }) {
   })();
 
   const submit = async () => {
-    if (!address || !client) return toast.error("Connect wallet first");
-    if (!(colNum > 0)) return toast.error("Enter collateral");
+    if (!address || !client) return toast.error(t("toast.connectFirst"));
+    if (!(colNum > 0)) return toast.error(t("toast.enterCollateral"));
     setBusy(true);
     refreshPositions(); // start polling now so the position shows the moment it mines
     // Optimistic: show a "confirming" position row immediately (display-only).
@@ -139,13 +141,13 @@ export default function TradePanel({ symbol }: { symbol: string }) {
       // must be enabled, and the collateral must fit the Trading balance.
       if (!oneClick.active) {
         removePendingOpen(symbol, isLong);
-        toast.error("請先啟用一鍵交易（資金由 Trading balance 出）");
+        toast.error(t("toast.enableOneClick"));
         window.dispatchEvent(new Event("xkub:getstarted"));
         return;
       }
       if (oneClick.balance < collateralTokens) {
         removePendingOpen(symbol, isLong);
-        toast.error("Trading balance 不足 — 請先入金到交易帳戶");
+        toast.error(t("toast.insufficientTrading"));
         return;
       }
 
@@ -158,13 +160,13 @@ export default function TradePanel({ symbol }: { symbol: string }) {
         try {
           try { await gasless(); }
           catch { await new Promise((r) => setTimeout(r, 1500)); await gasless(); }
-          toast.success("Order submitted (gasless) — keeper executes at fresh price");
+          toast.success(t("toast.orderSubmitted"));
           setAmount("");
           oneClick.refetch();
           refreshPositions();
           return;
         } catch {
-          toast("Relayer 暫時不可用，改用鏈上一鍵…");
+          toast(t("toast.relayerRetry"));
         }
       }
 
@@ -177,7 +179,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
           value: fee,
         });
         await client.waitForTransactionReceipt({ hash });
-        toast.success("Order queued (1-click) — keeper executes at next fresh price");
+        toast.success(t("toast.orderQueued"));
         setAmount("");
         oneClick.refetch();
         refreshPositions();
@@ -186,7 +188,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
 
       // Neither path available (relayer down + agent has no gas).
       removePendingOpen(symbol, isLong);
-      toast.error("Relayer 暫時不可用,且代理無 gas — 請稍後再試");
+      toast.error(t("toast.relayerDown"));
     } catch (e) {
       removePendingOpen(symbol, isLong); // order failed — drop the placeholder
       toast.error(errMsg(e));
@@ -255,7 +257,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
             isLong ? "bg-greenDim text-green" : "text-muted hover:text-fg"
           }`}
         >
-          <span className="text-[13px] font-semibold">Buy / Long</span>
+          <span className="text-[13px] font-semibold">{t("trade.buyLong")}</span>
           <span className="tnum text-[12px] opacity-80">{price > 0n ? fmtPrice(price) : "—"}</span>
         </button>
         <button
@@ -264,7 +266,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
             !isLong ? "bg-redDim text-red" : "text-muted hover:text-fg"
           }`}
         >
-          <span className="text-[13px] font-semibold">Sell / Short</span>
+          <span className="text-[13px] font-semibold">{t("trade.sellShort")}</span>
           <span className="tnum text-[12px] opacity-80">{price > 0n ? fmtPrice(price) : "—"}</span>
         </button>
       </div>
@@ -280,7 +282,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
               {mode === "cost" ? "Cost" : "Order Size"}
               {mode === "size" && unit === "asset" ? ` · ${symbol}` : " · USD"} ▾
             </button>
-            <span className="tnum text-muted">Available {fmtNum(availableUsd)} USD</span>
+            <span className="tnum text-muted">{t("trade.available")} {fmtNum(availableUsd)} USD</span>
           </div>
 
           {/* Unit Preference expander */}
@@ -389,7 +391,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
           }`}
         >
           {!address ? "請先連接錢包" : busy ? "Submitting…" : oppositeOpen ? `先平掉 ${symbol} ${isLong ? "空" : "多"}倉`
-            : `${oneClick.active ? "⚡ " : ""}${isLong ? "Buy / Long" : "Sell / Short"} ${symbol}`}
+            : `${oneClick.active ? "⚡ " : ""}${isLong ? t("trade.buyLong") : t("trade.sellShort")} ${symbol}`}
         </button>
 
         <div className="text-[11px] leading-relaxed text-mutedDim">
@@ -418,16 +420,16 @@ export default function TradePanel({ symbol }: { symbol: string }) {
       </Section>
 
       {/* account overview (isolated) */}
-      <Section title="Account · Isolated">
-        <Row k="Trading balance" v={`${fmtUsd(account.tradingUsd)} USD`} />
-        <Row k="Wallet" v={`${fmtUsd(account.walletUsd)} USD`} />
+      <Section title={t("acct.title")}>
+        <Row k={t("acct.trading")} v={`${fmtUsd(account.tradingUsd)} USD`} />
+        <Row k={t("acct.wallet")} v={`${fmtUsd(account.walletUsd)} USD`} />
         <Row
-          k="Unrealized PnL"
+          k={t("acct.uPnl")}
           v={`${account.unrealizedUsd >= 0n ? "+" : ""}${fmtUsd(account.unrealizedUsd)} USD`}
           tone={account.unrealizedUsd >= 0n ? "green" : "red"}
         />
-        <Row k="Used margin" v={`${fmtUsd(account.positionMarginUsd)} USD`} />
-        <Row k="Account value" v={`${fmtUsd(account.accountValueUsd)} USD`} accent />
+        <Row k={t("acct.usedMargin")} v={`${fmtUsd(account.positionMarginUsd)} USD`} />
+        <Row k={t("acct.value")} v={`${fmtUsd(account.accountValueUsd)} USD`} accent />
       </Section>
     </div>
   );

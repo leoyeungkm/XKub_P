@@ -9,6 +9,7 @@ import { errMsg, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
 import { gaslessAvailable, submitGaslessOrder } from "@/lib/gasless";
 import { refreshPositions } from "@/lib/portfolio";
+import { useT } from "@/lib/i18n";
 
 const COMBOS = MARKETS.flatMap((m) => [
   { symbol: m.symbol, isLong: true },
@@ -20,6 +21,7 @@ export default function PositionsTable() {
   const client = usePublicClient();
   const { writeContract } = useKubWrite();
   const oneClick = useOneClick();
+  const t = useT();
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
   const { data: minExecFee } = useReadContract({
@@ -75,7 +77,7 @@ export default function PositionsTable() {
           await new Promise((r) => setTimeout(r, 1500));
           await gasless();
         }
-        toast.success("Close submitted (gasless) — keeper executes at fresh price");
+        toast.success(t("toast.closeSubmitted"));
         refreshPositions();
         return;
       }
@@ -89,7 +91,7 @@ export default function PositionsTable() {
           value: fee,
         });
         await client.waitForTransactionReceipt({ hash });
-        toast.success("Close queued (1-click)");
+        toast.success(t("toast.closeQueued"));
         return;
       }
 
@@ -100,7 +102,7 @@ export default function PositionsTable() {
         value: fee,
       });
       await client.waitForTransactionReceipt({ hash });
-      toast.success("Close queued");
+      toast.success(t("toast.closeQueued"));
     } catch (e) {
       toast.error(errMsg(e));
     } finally {
@@ -151,7 +153,7 @@ export default function PositionsTable() {
                       disabled={busyKey === `${r.symbol}-${r.isLong}`}
                       className="rounded border border-line px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-red/50 hover:text-red disabled:opacity-50"
                     >
-                      {busyKey === `${r.symbol}-${r.isLong}` ? "Closing…" : "Close"}
+                      {busyKey === `${r.symbol}-${r.isLong}` ? t("pos.closing") : t("pos.closeMarket")}
                     </button>
                   </td>
                 </tr>

@@ -27,7 +27,15 @@ const NETWORK = process.env.KEEPER_NETWORK || "kubTestnet";
 const MARKETS = ["BTC", "ETH", "KUB"];
 
 const provider = new ethers.JsonRpcProvider(RPC);
+// Role wallets. With one key everything shares a nonce space and the tx lock
+// serialises ALL duties — a faucet burst or slow price post queues trade relays.
+// Optionally split roles so each has its own nonce lane:
+//   KUB_PRIVATE_KEY      price keeper (oracle.setPrices + signs prices)  [required]
+//   RELAYER_PRIVATE_KEY  order relay / triggers / liquidations (router keeper)
+//   FAUCET_PRIVATE_KEY   testnet faucet (no on-chain permission needed)
 const keeper = new ethers.Wallet(process.env.KUB_PRIVATE_KEY, provider);
+const relayerWallet = process.env.RELAYER_PRIVATE_KEY ? new ethers.Wallet(process.env.RELAYER_PRIVATE_KEY, provider) : keeper;
+const faucetWallet = process.env.FAUCET_PRIVATE_KEY ? new ethers.Wallet(process.env.FAUCET_PRIVATE_KEY, provider) : keeper;
 const abis = JSON.parse(fs.readFileSync(path.join(__dirname, "keeper-abis.json"), "utf8"));
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -36,15 +44,18 @@ const toWei = (price) => BigInt(Math.round(price * 1e8)) * (E18 / 10n ** 8n);
 let GAS_PRICE = 100n * 10n ** 9n; // refreshed from the chain; legacy (KUB has no EIP-1559)
 const TX = () => ({ type: 0, gasPrice: GAS_PRICE });
 
-// All keeper txs share one wallet; concurrent sends (price loop vs HTTP handlers)
-// race the nonce and one silently reverts. Serialize the SEND (nonce assignment)
-// through this lock — waiting for the receipt happens outside it.
-let txChain = Promise.resolve();
-function sendLocked(fn) {
-  const p = txChain.then(fn, fn);
-  txChain = p.then(() => {}, () => {});
+// Concurrent sends from the SAME wallet race the nonce and one silently reverts.
+// Serialize the SEND (nonce assignment) per wallet — different role wallets get
+// independent lanes, so a faucet burst never queues a trade relay.
+const txChains = new Map(); // wallet address -> promise chain
+function sendLockedFor(wallet, fn) {
+  const key = wallet.address;
+  const prev = txChains.get(key) ?? Promise.resolve();
+  const p = prev.then(fn, fn);
+  txChains.set(key, p.then(() => {}, () => {}));
   return p;
 }
+const sendLocked = (fn) => sendLockedFor(keeper, fn); // price-keeper lane (main loop)
 
 // Testnet faucet: email/embedded-wallet users have 0 tKUB and can't pay for the
 // setup/deposit owner tx. Drip a little native KUB (for gas) + mint test KUSDT,
@@ -153,7 +164,7 @@ async function maybePushPrices(oracle, router, market, maxDeviationBps) {
 async function executePending(router) {
   const ids = await router.getPendingRequests(20);
   for (const id of ids) {
-    try { await (await sendLocked(() => router.executeRequest(id, TX()))).wait(); console.log(`[${now()}] executed request #${id}`); }
+    try { await (await sendLockedFor(relayerWallet, () => router.executeRequest(id, TX()))).wait(); console.log(`[${now()}] executed request #${id}`); }
     catch (e) { console.error(`[${now()}] execute #${id} failed: ${e.shortMessage ?? e.message ?? e}`); }
   }
 }
@@ -172,7 +183,7 @@ async function executeTriggers(router, oracle, market) {
         const tpHit = t.tpPrice > 0n && (m.isLong ? price >= t.tpPrice : price <= t.tpPrice);
         const slHit = t.slPrice > 0n && (m.isLong ? price <= t.slPrice : price >= t.slPrice);
         if (!tpHit && !slHit) continue;
-        await (await sendLocked(() => router.executeTrigger(m.owner, m.marketId, m.isLong, TX()))).wait();
+        await (await sendLockedFor(relayerWallet, () => router.executeTrigger(m.owner, m.marketId, m.isLong, TX()))).wait();
         console.log(`[${now()}] ${tpHit ? "TP" : "SL"} closed ${m.owner} ${ethers.decodeBytes32String(m.marketId)} ${m.isLong ? "long" : "short"}`);
       } catch (e) { console.error(`[${now()}] trigger exec failed: ${e.shortMessage ?? e.message ?? e}`); }
     }
@@ -194,9 +205,9 @@ async function liquidateUnderwater(oracle, market) {
           const ts = Math.floor(Date.now() / 1000);
           const price = toWei(cex);
           const sig = await signPrice(oracle, m.marketId, price, ts);
-          await (await sendLocked(() => market.liquidateWithSignedPrice(m.owner, m.marketId, m.isLong, price, ts, sig, TX()))).wait();
+          await (await sendLockedFor(relayerWallet, () => market.liquidateWithSignedPrice(m.owner, m.marketId, m.isLong, price, ts, sig, TX()))).wait();
         } else {
-          await (await sendLocked(() => market.liquidate(m.owner, m.marketId, m.isLong, TX()))).wait();
+          await (await sendLockedFor(relayerWallet, () => market.liquidate(m.owner, m.marketId, m.isLong, TX()))).wait();
         }
         console.log(`[${now()}] liquidated ${m.owner} ${ethers.decodeBytes32String(m.marketId)} ${m.isLong ? "long" : "short"}`);
       } catch (e) { console.error(`[${now()}] liquidate failed: ${e.shortMessage ?? e.message ?? e}`); }
@@ -264,10 +275,10 @@ function startRelayer(router, oracle, maxDeviationBps, kusdt) {
           // KUB (native gas) — the scarce resource, gated per IP window.
           const stamps = (ip ? faucetIps.get(ip) ?? [] : []).filter((t) => Date.now() - t < IP_WINDOW_MS);
           const ipLimited = !!ip && stamps.length >= IP_MAX_CLAIMS;
-          const reserveOk = (await provider.getBalance(keeper.address)) >= FAUCET_KUB + FAUCET_RESERVE;
+          const reserveOk = (await provider.getBalance(faucetWallet.address)) >= FAUCET_KUB + FAUCET_RESERVE;
           let sentKub = false;
           if (!ipLimited && reserveOk && (await provider.getBalance(addr)) < FAUCET_KUB) {
-            const tx = await sendLocked(() => keeper.sendTransaction({ to: addr, value: FAUCET_KUB, ...TX(), gasLimit: 21000n }));
+            const tx = await sendLockedFor(faucetWallet, () => faucetWallet.sendTransaction({ to: addr, value: FAUCET_KUB, ...TX(), gasLimit: 21000n }));
             await tx.wait();
             sentKub = true;
             if (ip) faucetIps.set(ip, [...stamps, Date.now()]);
@@ -277,12 +288,12 @@ function startRelayer(router, oracle, maxDeviationBps, kusdt) {
           // keeper's pre-minted stock; the keeper bulk-refills itself when low.
           let sentKusdt = false;
           if ((await kusdt.balanceOf(addr)) < FAUCET_KUSDT / 10n) {
-            if ((await kusdt.balanceOf(keeper.address)) < FAUCET_KUSDT * 2n) {
-              const mintTx = await sendLocked(() => kusdt.mint(keeper.address, KUSDT_SELF_MINT, TX()));
+            if ((await kusdt.balanceOf(faucetWallet.address)) < FAUCET_KUSDT * 2n) {
+              const mintTx = await sendLockedFor(faucetWallet, () => kusdt.mint(faucetWallet.address, KUSDT_SELF_MINT, TX()));
               await mintTx.wait();
               console.log(`[${now()}] faucet self-minted ${ethers.formatEther(KUSDT_SELF_MINT)} KUSDT`);
             }
-            const tx = await sendLocked(() => kusdt.transfer(addr, FAUCET_KUSDT, TX()));
+            const tx = await sendLockedFor(faucetWallet, () => kusdt.transfer(addr, FAUCET_KUSDT, TX()));
             await tx.wait();
             sentKusdt = true;
           }
@@ -320,7 +331,7 @@ function startRelayer(router, oracle, maxDeviationBps, kusdt) {
           const value = toWei(prices[sym]);
           const ts = Math.floor(Date.now() / 1000) - 3;
           const priceSig = await signPrice(oracle, o.marketId, value, ts);
-          const tx = await sendLocked(() => router.executeSignedOrderWithPrice(o, sig, value, ts, priceSig, TX()));
+          const tx = await sendLockedFor(relayerWallet, () => router.executeSignedOrderWithPrice(o, sig, value, ts, priceSig, TX()));
           const rcpt = await tx.wait(1, 40_000);
           if (!rcpt || rcpt.status !== 1) { submitted.delete(key); throw new Error(`execution reverted on-chain (${tx.hash})`); }
           console.log(`[${now()}] relayed ${o.isIncrease ? "open" : "close"} ${sym} for ${o.owner} #${o.nonce} @ $${Number(ethers.formatEther(value)).toFixed(sym === "KUB" ? 4 : 0)} (${tx.hash})`);
@@ -344,19 +355,22 @@ async function refreshGasPrice() {
 
 async function main() {
   const dep = loadDeployment();
-  const oracle = new ethers.Contract(dep.addresses.XKubPriceOracle, abis.oracle, keeper);
-  const router = new ethers.Contract(dep.addresses.XKubPerpRouter, abis.router, keeper);
-  const market = new ethers.Contract(dep.addresses.XKubPerpMarket, abis.market, keeper);
+  const oracle = new ethers.Contract(dep.addresses.XKubPriceOracle, abis.oracle, keeper);            // price lane (W1)
+  const router = new ethers.Contract(dep.addresses.XKubPerpRouter, abis.router, relayerWallet);      // trade lane (W2)
+  const market = new ethers.Contract(dep.addresses.XKubPerpMarket, abis.market, relayerWallet);      // liquidations → trade lane
   const kusdt = new ethers.Contract(dep.addresses.KUSDT, [
     "function balanceOf(address) view returns (uint256)",
     "function transfer(address,uint256) returns (bool)",
     "function mint(address,uint256)",
-  ], keeper);
+  ], faucetWallet);                                                                                   // faucet lane (W3)
 
-  console.log(`XKub keeper (standalone) — ${keeper.address} on ${NETWORK}, every ${INTERVAL_MS}ms`);
+  console.log(`XKub keeper (standalone) on ${NETWORK}, every ${INTERVAL_MS}ms`);
+  console.log(`  price:   ${keeper.address}`);
+  console.log(`  relayer: ${relayerWallet.address}${relayerWallet === keeper ? " (same key)" : ""}`);
+  console.log(`  faucet:  ${faucetWallet.address}${faucetWallet === keeper ? " (same key)" : ""}`);
   await refreshGasPrice();
   if (!(await oracle.isKeeper(keeper.address))) throw new Error("not an oracle keeper — oracle.setKeeper() first");
-  if (!(await router.isKeeper(keeper.address))) throw new Error("not a router keeper — router.setKeeper() first");
+  if (!(await router.isKeeper(relayerWallet.address))) throw new Error("relayer wallet is not a router keeper — router.setKeeper() first");
   const maxDeviationBps = ((await oracle.maxDeviationBps()) * 9n) / 10n;
 
   const refreshTicker = async () => { try { latestPrices = await fetchPrices(); } catch { /* blip */ } };

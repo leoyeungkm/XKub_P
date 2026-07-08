@@ -12,6 +12,7 @@ import toast from "react-hot-toast";
 import { ADDR, b32, chain, erc20Abi, kubTxOverrides, referralAbi, requestFaucet, routerAbi, tokenToUsd, usdToToken } from "@/config/contracts";
 import { errMsg, fmtNum } from "@/lib/format";
 import { ensureAgentAccount, useOneClick } from "@/lib/oneclick";
+import { useT } from "@/lib/i18n";
 
 const seenKey = (o: string) => `xkub.onboard.${o.toLowerCase()}`;
 const termsKey = (o: string) => `xkub.terms.${o.toLowerCase()}`;
@@ -25,6 +26,14 @@ export default function OnboardingModal() {
   const walletChainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
   const oc = useOneClick();
+  const t = useT();
+
+  const getFaucet = async () => {
+    if (!address) return;
+    const p = requestFaucet(address);
+    toast.promise(p, { loading: t("faucet.loading"), success: t("faucet.success"), error: t("faucet.error") });
+    await p;
+  };
 
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0); // 0 terms · 1 enable+deposit
@@ -86,7 +95,7 @@ export default function OnboardingModal() {
       // The tx silently goes nowhere if the wallet is on another network —
       // force it onto KUB testnet first, and surface a clear error if it won't.
       if (walletChainId !== chain.id) {
-        toast(`切換到 ${chain.name}…`);
+        toast(t("onb.switching"));
         try {
           await switchChainAsync({ chainId: chain.id });
         } catch {
@@ -98,7 +107,7 @@ export default function OnboardingModal() {
       // gas — top them up from the faucet (also mints test KUSDT) and wait for it.
       const kub = await client.getBalance({ address });
       if (kub < parseEther("0.08")) {
-        toast("領取測試 KUB…");
+        toast(t("faucet.loading"));
         await requestFaucet(address);
         for (let i = 0; i < 12; i++) {
           await new Promise((r) => setTimeout(r, 2500));
@@ -117,7 +126,7 @@ export default function OnboardingModal() {
           address: ADDR.kusdt, abi: erc20Abi, functionName: "allowance", args: [address, ADDR.router],
         });
         if (allowance < tokens) {
-          toast("Approving KUSDT…");
+          toast(t("onb.approving"));
           const h = await writeContractAsync({
             address: ADDR.kusdt, abi: erc20Abi, functionName: "approve", args: [ADDR.router, 2n ** 256n - 1n],
             ...fees,
@@ -126,7 +135,7 @@ export default function OnboardingModal() {
         }
       }
 
-      toast("Setting up…");
+      toast(t("onb.settingUp"));
       // Trading is gasless (agent signs, relayer pays), so the agent needs no KUB.
       // Don't spend the user's KUB funding agent gas here — the on-chain 1-click
       // fallback can be topped up manually from the Account panel if wanted.
@@ -136,7 +145,7 @@ export default function OnboardingModal() {
         args: [agent.address, tokens, code], value: 0n, ...fees,
       });
       await client.waitForTransactionReceipt({ hash: h, timeout: 90_000 });
-      toast.success("設定完成，開始交易");
+      toast.success(t("onb.setupDone"));
       oc.refetch();
       dismiss();
     } catch (e) { toast.error(errMsg(e)); }
@@ -148,34 +157,34 @@ export default function OnboardingModal() {
       <div className="w-full max-w-[440px] overflow-hidden rounded-xl border border-line bg-panel shadow-2xl">
         <div className="flex items-center justify-between border-b border-line bg-panel2 px-5 py-4">
           <div className="flex items-center gap-2 text-[15px] font-semibold">
-            <span className="text-accent">⚡</span> 開始交易 · Get Started
+            <span className="text-accent">⚡</span> {t("onb.title")}
           </div>
           <div className="flex items-center gap-3">
             <Steps step={step} />
-            <button onClick={dismiss} className="text-muted transition-colors hover:text-fg" title="關閉">✕</button>
+            <button onClick={dismiss} className="text-muted transition-colors hover:text-fg" title="✕">✕</button>
           </div>
         </div>
 
         {step === 0 && (
           <div className="flex flex-col gap-4 p-5">
-            <p className="text-[13px] leading-relaxed text-muted">繼續前，請檢閱並接受以下條款：</p>
+            <p className="text-[13px] leading-relaxed text-muted">{t("onb.termsIntro")}</p>
             <div className="flex flex-col gap-1.5 rounded-md border border-line bg-bg p-3 text-[12.5px]">
-              <Legal>Terms of Use · 使用條款</Legal>
-              <Legal>Privacy Policy · 私隱政策</Legal>
-              <Legal>Cookie Policy · Cookie 政策</Legal>
+              <Legal>{t("onb.terms")}</Legal>
+              <Legal>{t("onb.privacy")}</Legal>
+              <Legal>{t("onb.cookie")}</Legal>
             </div>
             <label className="flex cursor-pointer items-start gap-2 text-[12.5px] text-muted">
               <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)}
                 className="mt-0.5 h-4 w-4 accent-accent" />
-              <span>我已閱讀並同意上述條款。明白 XKub Perp 為未經審計嘅測試網軟件，永續合約具高風險，可能損失全部本金。</span>
+              <span>{t("onb.agree")}</span>
             </label>
             <div className="flex gap-2">
               <button onClick={dismiss} className="rounded-md border border-line px-4 py-2.5 text-[13px] font-medium text-muted transition-colors hover:text-fg">
-                拒絕
+                {t("onb.decline")}
               </button>
               <button onClick={acceptTerms} disabled={!agreed}
                 className="flex-1 rounded-md bg-accent py-2.5 text-[14px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40">
-                接受並繼續
+                {t("onb.accept")}
               </button>
             </div>
           </div>
@@ -183,15 +192,27 @@ export default function OnboardingModal() {
 
         {step === 1 && (
           <div className="flex flex-col gap-4 p-5">
-            <div className="text-[14px] font-semibold">設定交易帳戶並入金</div>
+            <div className="text-[14px] font-semibold">{t("onb.setupTitle")}</div>
             <p className="text-[12.5px] leading-relaxed text-muted">
-              一筆交易同時完成：授權代理密鑰（免彈窗交易）、存入交易保證金。之後交易走 relayer 代付 gas，零彈窗零 gas，資金隨時可於 Portfolio 提取。
+              {t("onb.setupDesc")}
             </p>
+
+            {/* Testnet notice + one-tap faucet for everyone */}
+            <div className="flex items-center gap-2 rounded-md border border-accent/30 bg-accentDim/40 px-3 py-2 text-[11.5px] text-muted">
+              <span className="leading-relaxed">{t("onb.testnet")}</span>
+              <button
+                onClick={getFaucet}
+                className="ml-auto shrink-0 rounded bg-accent px-2 py-1 text-[11px] font-medium text-bg transition-opacity hover:opacity-90"
+              >
+                {t("onb.getTestFunds")}
+              </button>
+            </div>
+
             <div>
               <div className="mb-1.5 flex justify-between text-[11px]">
-                <span className="eyebrow">入金金額 · Deposit</span>
+                <span className="eyebrow">{t("onb.depositLabel")}</span>
                 <button className="tnum text-accent" onClick={() => setAmount(String(Math.floor(walletUsd * 100) / 100))}>
-                  錢包 {fmtNum(walletUsd)} USD
+                  {t("onb.wallet")} {fmtNum(walletUsd)} USD
                 </button>
               </div>
               <div className="flex items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent/60">
@@ -210,7 +231,7 @@ export default function OnboardingModal() {
 
             {ADDR.referral && !hasCode && (
               <div>
-                <div className="eyebrow mb-1.5">邀請碼（同時生成，可留空）· Referral Code</div>
+                <div className="eyebrow mb-1.5">{t("onb.refCode")}</div>
                 <div className="flex items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent/60">
                   <input value={refCode} onChange={(e) => setRefCode(clean(e.target.value))} placeholder="YOURCODE"
                     className="tnum w-full bg-transparent py-2 text-[14px] uppercase tracking-wide outline-none" />
@@ -220,15 +241,15 @@ export default function OnboardingModal() {
 
             <button onClick={enableAndDeposit} disabled={busy}
               className="rounded-md bg-accent py-2.5 text-[14px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40">
-              {busy ? "設定中…" : "設定並入金"}
+              {busy ? t("onb.settingUp") : t("onb.setupBtn")}
             </button>
             <button onClick={() => setAmount("")}
               className="text-[12px] text-mutedDim transition-colors hover:text-muted"
-              title="只設定帳戶，稍後再入金">
-              暫不入金，只設定帳戶
+              title={t("onb.skipDeposit")}>
+              {t("onb.skipDeposit")}
             </button>
             <p className="text-[11px] leading-relaxed text-mutedDim">
-              授權代理、入金、生成邀請碼一筆交易完成。交易 gas 由平台代付,你唔使入 KUB。首次需額外一次 KUSDT 授權（approve）。
+              {t("onb.setupNote")}
             </p>
           </div>
         )}

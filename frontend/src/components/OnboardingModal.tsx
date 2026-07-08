@@ -161,7 +161,7 @@ export default function OnboardingModal() {
       <div className="w-full max-w-[440px] overflow-hidden rounded-xl border border-line bg-panel shadow-2xl">
         <div className="flex items-center justify-between border-b border-line bg-panel2 px-5 py-4">
           <div className="flex items-center gap-2 text-[15px] font-semibold">
-            <span className="text-accent">⚡</span> {t("onb.title")}
+            {t("onb.title")}
           </div>
           <div className="flex items-center gap-3">
             <Steps step={step} />

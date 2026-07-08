@@ -1,0 +1,20 @@
+# Render Blueprint for the XKub keeper + gasless relayer.
+# New > Blueprint > pick this repo. Render gives it HTTPS automatically, so the
+# frontend's relayerUrl is just https://<service>.onrender.com/order.
+#
+# IMPORTANT: use plan "starter" (always-on). The "free" plan spins the service
+# DOWN after ~15 min idle, which stops price posting, relaying AND liquidations.
+services:
+  - type: web
+    name: xkub-keeper
+    runtime: node
+    plan: starter            # $7/mo, never sleeps. Change to "free" only for quick tests.
+    region: singapore        # closest to KUB / Thailand; pick your nearest
+    buildCommand: npm ci
+    startCommand: npm run keeper:perp:testnet
+    healthCheckPath: /prices
+    envVars:
+      - key: KUB_PRIVATE_KEY  # keeper signer — set as a secret in the dashboard
+        sync: false
+      - key: RELAYER_URL      # https://<your-service>.onrender.com/order
+        sync: false

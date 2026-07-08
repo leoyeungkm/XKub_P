@@ -27,7 +27,9 @@ import * as path from "path";
 
 const E18 = 10n ** 18n;
 const INTERVAL_MS = Number(process.env.KEEPER_INTERVAL_MS ?? "15000");
-const RELAYER_PORT = Number(process.env.RELAYER_PORT ?? "8799");
+// Render/Heroku/etc set PORT and route HTTPS to it; fall back to RELAYER_PORT
+// locally (8799).
+const RELAYER_PORT = Number(process.env.PORT ?? process.env.RELAYER_PORT ?? "8799");
 
 const MARKETS = ["BTC", "ETH", "KUB"] as const;
 type Sym = (typeof MARKETS)[number];
@@ -359,14 +361,16 @@ async function main() {
   await refreshTicker();
   setInterval(refreshTicker, 5000);
 
+  // Bind the HTTP server first so the host (Render/etc) detects the open port
+  // immediately, then finish startup below.
+  startRelayer(router, oracle, maxDeviationBps, keeper); // gasless: accept agent-signed orders over HTTP
+
   // A fresh deployment seeds the oracle with placeholder prices; walk them to the
   // real value on startup (each step ≤ maxDeviationBps) so the first order isn't
   // rejected for "signed deviation too high". Self-heals every (re)deploy.
   // Non-fatal: if prices are already fresh a step can be a no-op/revert; keep going.
   try { await initPricesToReal(oracle, maxDeviationBps); }
   catch (e: any) { console.error(`[${now()}] initPrices skipped: ${e.shortMessage ?? e.message ?? e}`); }
-
-  startRelayer(router, oracle, maxDeviationBps, keeper); // gasless: accept agent-signed orders over HTTP
 
   // eslint-disable-next-line no-constant-condition
   while (true) {

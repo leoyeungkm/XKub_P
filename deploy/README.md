@@ -12,7 +12,21 @@ the relayer must be reachable over **HTTPS** from the Vercel frontend.
  HTTPS relayer.yourdomain ──▶ VPS: Caddy ▶ keeper/relayer :8799 ──▶ KUB testnet
 ```
 
-## 1. Keeper + relayer on a VPS (do this first — you need its URL)
+## 1. Keeper + relayer — option A: Render (easiest, auto-HTTPS)
+
+Uses `render.yaml` in the repo root. Render gives HTTPS out of the box, so no
+Caddy/Cloudflare needed.
+
+1. Render → **New > Blueprint** → pick this repo (it reads `render.yaml`).
+2. Set env vars (secrets): `KUB_PRIVATE_KEY` (keeper signer), and after the first
+   deploy set `RELAYER_URL` = `https://<your-service>.onrender.com/order`.
+3. **Use the `starter` plan** — the free plan spins down after ~15 min idle, which
+   stops price posting, relaying AND liquidations. Starter ($7/mo) never sleeps.
+4. Verify: `https://<your-service>.onrender.com/prices` returns live prices.
+
+Then skip to step 2 (point the frontend at `https://<service>.onrender.com/order`).
+
+## 1. Keeper + relayer — option B: a VPS (do this first — you need its URL)
 
 Any small Linux VPS ($5/mo: Hetzner / DigitalOcean / Vultr).
 

@@ -30,11 +30,16 @@ const provider = new ethers.JsonRpcProvider(RPC);
 // Role wallets. With one key everything shares a nonce space and the tx lock
 // serialises ALL duties — a faucet burst or slow price post queues trade relays.
 // Optionally split roles so each has its own nonce lane:
-//   KUB_PRIVATE_KEY      price keeper (oracle.setPrices + signs prices)  [required]
-//   RELAYER_PRIVATE_KEY  order relay / triggers / liquidations (router keeper)
-//   FAUCET_PRIVATE_KEY   testnet faucet (no on-chain permission needed)
+//   KUB_PRIVATE_KEY         price keeper (oracle.setPrices + signs prices)  [required]
+//   RELAYER_PRIVATE_KEY     order relay / triggers (router keeper)
+//   LIQUIDATOR_PRIVATE_KEY  liquidations — permissionless (signed price verifies
+//                           the SIGNER, not the caller), needs only gas. Its own
+//                           lane matters in a crash, when liquidations and user
+//                           closes spike at the same time.
+//   FAUCET_PRIVATE_KEY      testnet faucet (no on-chain permission needed)
 const keeper = new ethers.Wallet(process.env.KUB_PRIVATE_KEY, provider);
 const relayerWallet = process.env.RELAYER_PRIVATE_KEY ? new ethers.Wallet(process.env.RELAYER_PRIVATE_KEY, provider) : keeper;
+const liquidatorWallet = process.env.LIQUIDATOR_PRIVATE_KEY ? new ethers.Wallet(process.env.LIQUIDATOR_PRIVATE_KEY, provider) : relayerWallet;
 const faucetWallet = process.env.FAUCET_PRIVATE_KEY ? new ethers.Wallet(process.env.FAUCET_PRIVATE_KEY, provider) : keeper;
 const abis = JSON.parse(fs.readFileSync(path.join(__dirname, "keeper-abis.json"), "utf8"));
 
@@ -232,7 +237,8 @@ async function liquidateUnderwater(oracle, market, maintBps) {
         const ts = Math.floor(Date.now() / 1000);
         const price = toWei(cex);
         const sig = await signPrice(oracle, m.marketId, price, ts);
-        await (await sendLockedFor(relayerWallet, () => market.liquidateWithSignedPrice(m.owner, m.marketId, m.isLong, price, ts, sig, TX()))).wait();
+        const marketLiq = market.connect(liquidatorWallet);
+        await (await sendLockedFor(liquidatorWallet, () => marketLiq.liquidateWithSignedPrice(m.owner, m.marketId, m.isLong, price, ts, sig, TX()))).wait();
         console.log(`[${now()}] liquidated ${m.owner} ${sym} ${m.isLong ? "long" : "short"}`);
       } catch (e) { console.error(`[${now()}] liquidate failed: ${e.shortMessage ?? e.message ?? e}`); }
     }
@@ -397,6 +403,7 @@ async function main() {
   console.log(`XKub keeper (standalone) on ${NETWORK}, every ${INTERVAL_MS}ms`);
   console.log(`  price:   ${keeper.address}`);
   console.log(`  relayer: ${relayerWallet.address}${relayerWallet === keeper ? " (same key)" : ""}`);
+  console.log(`  liquidator: ${liquidatorWallet.address}${liquidatorWallet === relayerWallet ? " (same key)" : ""}`);
   console.log(`  faucet:  ${faucetWallet.address}${faucetWallet === keeper ? " (same key)" : ""}`);
   await refreshGasPrice();
   if (!(await oracle.isKeeper(keeper.address))) throw new Error("not an oracle keeper — oracle.setKeeper() first");

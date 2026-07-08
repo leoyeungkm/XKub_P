@@ -7,8 +7,10 @@ import { useKubWrite } from "@/lib/kubWrite";
 import toast from "react-hot-toast";
 import { ADDR, E18, erc20Abi, marketAbi, poolAbi, usdToToken, tokenToUsd } from "@/config/contracts";
 import { errMsg, fmtNum, fmtUsd } from "@/lib/format";
+import { useT } from "@/lib/i18n";
 
 export default function Earn() {
+  const t = useT();
   const { address, isConnected } = useAccount();
   const client = usePublicClient();
   const { writeContract } = useKubWrite();
@@ -88,9 +90,9 @@ export default function Earn() {
   return (
     <main className="mx-auto flex max-w-[980px] flex-col gap-2.5 p-2.5">
       <div className="px-1 pt-3">
-        <h1 className="text-[20px] font-semibold">Earn · XPLP 流動性金庫</h1>
+        <h1 className="text-[20px] font-semibold">{t("earn.title")}</h1>
         <p className="mt-1 max-w-[640px] text-[13px] leading-relaxed text-muted">
-          存入 KUSDT 成為所有交易者嘅對手方，賺取全部交易手續費。與 GMX 嘅 GLP、Hyperliquid 嘅 HLP、Jupiter 嘅 JLP 同類機制。
+          {t("earn.subtitle")}
         </p>
       </div>
 
@@ -99,36 +101,36 @@ export default function Earn() {
         <div className="flex flex-col gap-2.5">
           <div className="rounded-lg border border-line bg-panel p-5">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Big k="金庫總值 · TVL" v={poolValue !== undefined ? `${fmtUsd(poolValue, 0)}` : "—"} unit="USD" />
-              <Big k="XPLP 淨值 · NAV" v={sharePrice !== undefined ? `$${Number(formatEther(sharePrice)).toFixed(4)}` : "—"} />
-              <Big k="XPLP 總量" v={supply !== undefined ? fmtNum(Number(formatEther(supply)), 0) : "—"} />
+              <Big k={t("earn.tvl")} v={poolValue !== undefined ? `${fmtUsd(poolValue, 0)}` : "—"} unit="USD" />
+              <Big k={t("earn.nav")} v={sharePrice !== undefined ? `$${Number(formatEther(sharePrice)).toFixed(4)}` : "—"} />
+              <Big k={t("earn.supply")} v={supply !== undefined ? fmtNum(Number(formatEther(supply)), 0) : "—"} />
             </div>
           </div>
 
           <div className="rounded-lg border border-line bg-panel p-5">
-            <div className="eyebrow mb-3">金庫狀態 · Pool Status</div>
+            <div className="eyebrow mb-3">{t("earn.poolStatus")}</div>
             <div className="mb-1.5 flex justify-between text-[12.5px]">
-              <span className="text-muted">使用率 · Utilization</span>
+              <span className="text-muted">{t("earn.utilization")}</span>
               <span className="tnum">{utilization.toFixed(1)}%</span>
             </div>
             <div className="mb-4 h-2 overflow-hidden rounded-full bg-panel2">
               <div className={`h-full transition-all duration-500 ${utilization > 80 ? "bg-red" : "bg-accent"}`} style={{ width: `${utilization}%` }} />
             </div>
             <div className="grid grid-cols-2 gap-3 text-[12.5px]">
-              <Row k="未平倉合約 · Open Interest" v={totalOi !== undefined ? `${fmtUsd(totalOi, 0)} USD` : "—"} />
-              <Row k="儲備要求 · Reserve" v={reserveBps !== undefined ? `${Number(reserveBps) / 100}% of OI` : "—"} />
-              <Row k="提款冷靜期" v={cooldown !== undefined ? `${Number(cooldown) / 60} 分鐘` : "—"} />
-              <Row k="對手方 · Counterparty" v="全部交易倉位" />
+              <Row k={t("earn.openInterest")} v={totalOi !== undefined ? `${fmtUsd(totalOi, 0)} USD` : "—"} />
+              <Row k={t("earn.reserve")} v={reserveBps !== undefined ? `${Number(reserveBps) / 100}% ${t("earn.ofOi")}` : "—"} />
+              <Row k={t("earn.withdrawCooldown")} v={cooldown !== undefined ? `${Number(cooldown) / 60} ${t("earn.minutes")}` : "—"} />
+              <Row k={t("earn.counterparty")} v={t("earn.counterpartyValue")} />
             </div>
           </div>
 
           <div className="rounded-lg border border-line bg-panel p-5">
-            <div className="eyebrow mb-2">運作方式 · How it works</div>
+            <div className="eyebrow mb-2">{t("earn.howItWorks")}</div>
             <ul className="flex flex-col gap-2 text-[12.5px] leading-relaxed text-muted">
-              <Li>交易者虧損與所有手續費（開/平倉費、資金費、清算費）流入金庫，推升 XPLP 淨值。</Li>
-              <Li>交易者盈利由金庫支付，XPLP 淨值下跌。你係莊家，賺統計優勢與費用。</Li>
-              <Li>每次存款有 15 分鐘提款冷靜期（防三明治攻擊）；提款須保留足夠儲備支付未平倉位。</Li>
-              <Li className="text-red/90">風險：交易者整體盈利時金庫會虧損。這是槓桿做市，非無風險收益。</Li>
+              <Li>{t("earn.how1")}</Li>
+              <Li>{t("earn.how2")}</Li>
+              <Li>{t("earn.how3")}</Li>
+              <Li className="text-red/90">{t("earn.how4")}</Li>
             </ul>
           </div>
         </div>
@@ -136,12 +138,12 @@ export default function Earn() {
         {/* Right: your position + deposit/withdraw */}
         <div className="flex flex-col gap-2.5">
           <div className="rounded-lg border border-line bg-panel p-5">
-            <div className="eyebrow mb-3">你的持倉 · Your Position</div>
+            <div className="eyebrow mb-3">{t("earn.yourPosition")}</div>
             <div className="grid grid-cols-2 gap-2">
-              <Cell k="XPLP 餘額" v={myPlp !== undefined ? fmtNum(Number(formatEther(myPlp)), 2) : "—"} />
-              <Cell k="持倉價值" v={`${fmtUsd(myValue)} USD`} />
-              <Cell k="佔金庫比例" v={`${mySharePct.toFixed(3)}%`} />
-              <Cell k="提款冷靜期" v={cooldownLeft > 0 ? `${Math.ceil(cooldownLeft / 60)} 分鐘` : "可提款"} tone={cooldownLeft > 0 ? "red" : "green"} />
+              <Cell k={t("earn.xplpBalance")} v={myPlp !== undefined ? fmtNum(Number(formatEther(myPlp)), 2) : "—"} />
+              <Cell k={t("earn.shareValue")} v={`${fmtUsd(myValue)} USD`} />
+              <Cell k={t("earn.poolShare")} v={`${mySharePct.toFixed(3)}%`} />
+              <Cell k={t("earn.withdrawCooldown")} v={cooldownLeft > 0 ? `${Math.ceil(cooldownLeft / 60)} ${t("earn.minutes")}` : t("earn.withdrawable")} tone={cooldownLeft > 0 ? "red" : "green"} />
             </div>
           </div>
 
@@ -149,18 +151,18 @@ export default function Earn() {
             <div className="grid grid-cols-2 gap-1 p-1">
               <button onClick={() => setTab("deposit")}
                 className={`rounded-md py-2.5 text-[14px] font-semibold transition-colors ${tab === "deposit" ? "bg-accentDim text-accent" : "text-muted hover:text-fg"}`}>
-                存入 Deposit
+                {t("earn.depositTab")}
               </button>
               <button onClick={() => setTab("withdraw")}
                 className={`rounded-md py-2.5 text-[14px] font-semibold transition-colors ${tab === "withdraw" ? "bg-panel2 text-fg" : "text-muted hover:text-fg"}`}>
-                提取 Withdraw
+                {t("earn.withdrawTab")}
               </button>
             </div>
             <div className="flex flex-col gap-2.5 p-3.5 pt-1.5">
               <div className="mb-0.5 flex justify-between text-[11px]">
-                <span className="eyebrow">{tab === "deposit" ? "KUSDT 金額" : "XPLP 數量"}</span>
+                <span className="eyebrow">{tab === "deposit" ? t("earn.kusdtAmount") : t("earn.xplpAmount")}</span>
                 <button className="tnum text-accent" onClick={() => setAmount(String(Math.floor(maxOut * 100) / 100))}>
-                  {tab === "deposit" ? `錢包 ${fmtNum(walletUsd)}` : `餘額 ${fmtNum(Number(formatEther(myPlp ?? 0n)), 2)}`}
+                  {tab === "deposit" ? `${t("earn.wallet")} ${fmtNum(walletUsd)}` : `${t("earn.balance")} ${fmtNum(Number(formatEther(myPlp ?? 0n)), 2)}`}
                 </button>
               </div>
               <div className="flex items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent/60">
@@ -171,17 +173,15 @@ export default function Earn() {
               </div>
               {tab === "withdraw" && cooldownLeft > 0 && (
                 <div className="rounded-md border border-red/40 bg-redDim/50 px-3 py-2 text-[11.5px] text-red">
-                  提款冷靜期尚餘約 {Math.ceil(cooldownLeft / 60)} 分鐘。
+                  {t("earn.cooldownNotePre")}{Math.ceil(cooldownLeft / 60)}{t("earn.cooldownNoteSuf")}
                 </div>
               )}
               <button onClick={run} disabled={busy || !isConnected}
                 className={`rounded-md py-3 text-[14px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40 ${tab === "deposit" ? "bg-accent" : "bg-panel2 !text-fg border border-line"}`}>
-                {!isConnected ? "請先連接錢包" : busy ? "處理中…" : tab === "deposit" ? "存入金庫" : "提取"}
+                {!isConnected ? t("earn.connectFirst") : busy ? t("earn.processing") : tab === "deposit" ? t("earn.depositBtn") : t("earn.withdrawBtn")}
               </button>
               <p className="text-[11px] leading-relaxed text-mutedDim">
-                {tab === "deposit"
-                  ? "存入即按當前淨值鑄造 XPLP。首次存款起 15 分鐘內不可提款。"
-                  : "按當前淨值贖回 KUSDT。若金庫需保留儲備支付未平倉位，提款可能受限。"}
+                {tab === "deposit" ? t("earn.depositHelp") : t("earn.withdrawHelp")}
               </p>
             </div>
           </div>

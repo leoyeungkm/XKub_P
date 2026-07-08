@@ -11,6 +11,7 @@ import {
 } from "@/config/contracts";
 import { errMsg, fmtNum, fmtUsd } from "@/lib/format";
 import { PENDING_REF_KEY } from "@/components/RefCapture";
+import { useT } from "@/lib/i18n";
 
 const ZERO32 = "0x0000000000000000000000000000000000000000000000000000000000000000";
 const clean = (s: string) => s.toUpperCase().replace(/[^A-Z0-9_]/g, "").slice(0, 31);
@@ -63,6 +64,7 @@ const fmtTime = (ts?: number) => {
 const shortAddr = (a: string) => a.slice(0, 6) + "…" + a.slice(-4);
 
 export default function Referral() {
+  const t = useT();
   const { address, isConnected } = useAccount();
   const { writeContract } = useKubWrite();
   const client = usePublicClient();
@@ -103,8 +105,8 @@ export default function Referral() {
     if (address && !myCode && !newCode) setNewCode(clean(address.slice(2, 8)));
   }, [address, myCode, newCode]);
 
-  if (!enabled) return <Center>Referrals are not enabled on this deployment.</Center>;
-  if (!isConnected) return <Center>Connect a wallet to manage referrals.</Center>;
+  if (!enabled) return <Center>{t("ref.notEnabled")}</Center>;
+  if (!isConnected) return <Center>{t("ref.connectWallet")}</Center>;
 
   const run = async (fn: () => Promise<`0x${string}`>, ok: string) => {
     if (!client) return;
@@ -142,20 +144,20 @@ export default function Referral() {
   return (
     <main className="mx-auto flex max-w-[820px] flex-col gap-2.5 p-2.5">
       <div className="px-1 pt-3 text-center">
-        <h1 className="text-[22px] font-semibold">Invite Friends &amp; Both Get Rewards</h1>
+        <h1 className="text-[22px] font-semibold">{t("ref.title")}</h1>
         <p className="mx-auto mt-2 max-w-[560px] text-[13px] leading-relaxed text-muted">
-          你賺朋友交易手續費嘅 <span className="text-accent">{rebatePct}% 佣金</span>，朋友享 <span className="text-accent">{friendDiscountPct}% 手續費折扣</span>。雙贏。
+          {t("ref.introA")}<span className="text-accent">{rebatePct}% {t("ref.commission")}</span>{t("ref.introB")}<span className="text-accent">{friendDiscountPct}% {t("ref.feeDiscount")}</span>{t("ref.introC")}
         </p>
       </div>
 
       {/* Code + link */}
       <div className="overflow-hidden rounded-lg border border-line bg-panel">
-        <h3 className="eyebrow border-b border-line px-3.5 py-2.5">你的邀請 · Your Referral</h3>
+        <h3 className="eyebrow border-b border-line px-3.5 py-2.5">{t("ref.yourReferral")}</h3>
         <div className="flex flex-col gap-3 p-3.5">
           {myCode ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-md bg-bg px-3.5 py-3">
-                <div className="eyebrow mb-1">Referral Code</div>
+                <div className="eyebrow mb-1">{t("ref.referralCode")}</div>
                 <button
                   onClick={() => { navigator.clipboard.writeText(myCode); toast.success("Code copied"); }}
                   className="tnum text-[18px] font-semibold tracking-wide transition-opacity hover:opacity-80"
@@ -164,29 +166,29 @@ export default function Referral() {
                 </button>
               </div>
               <div className="rounded-md bg-bg px-3.5 py-3">
-                <div className="eyebrow mb-1">Referral Link</div>
+                <div className="eyebrow mb-1">{t("ref.referralLink")}</div>
                 <button
                   onClick={() => { navigator.clipboard.writeText(shareLink); toast.success("Link copied"); }}
                   className="flex w-full items-center justify-between gap-2 text-left"
                 >
                   <span className="truncate text-[12px] text-muted">{shareLink}</span>
-                  <span className="shrink-0 text-[12px] text-accent">Copy ⧉</span>
+                  <span className="shrink-0 text-[12px] text-accent">{t("ref.copy")} ⧉</span>
                 </button>
               </div>
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
-              <p className="text-[12.5px] text-muted">我哋已為你準備好一個邀請碼，一撳即用（可自訂）。</p>
+              <p className="text-[12.5px] text-muted">{t("ref.prepared")}</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-md bg-bg px-3.5 py-3">
-                  <div className="eyebrow mb-1">邀請碼 · Code</div>
+                  <div className="eyebrow mb-1">{t("ref.codeLabel")}</div>
                   <div className="flex items-center rounded-md border border-line bg-panel px-2.5 focus-within:border-accent/60">
                     <input value={newCode} onChange={(e) => setNewCode(clean(e.target.value))} placeholder="YOURCODE"
                       className="tnum w-full bg-transparent py-2 text-[15px] uppercase tracking-wide outline-none" />
                   </div>
                 </div>
                 <div className="rounded-md bg-bg px-3.5 py-3">
-                  <div className="eyebrow mb-1">預覽連結 · Preview</div>
+                  <div className="eyebrow mb-1">{t("ref.previewLabel")}</div>
                   <div className="truncate pt-2 text-[12px] text-muted">
                     {typeof window !== "undefined" ? `${window.location.origin}/?ref=${newCode || "…"}` : ""}
                   </div>
@@ -194,7 +196,7 @@ export default function Referral() {
               </div>
               <button onClick={register} disabled={busy || newCode.length < 3}
                 className="rounded-md bg-accent py-2.5 text-[14px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40">
-                {busy ? "生成中…" : "生成我的邀請連結"}
+                {busy ? t("ref.generating") : t("ref.generateLink")}
               </button>
             </div>
           )}
@@ -204,36 +206,36 @@ export default function Referral() {
       {/* Stats */}
       <div className="overflow-hidden rounded-lg border border-line bg-panel">
         <h3 className="eyebrow flex items-center justify-between border-b border-line px-3.5 py-2.5">
-          <span>統計 · Total Statistics</span>
+          <span>{t("ref.totalStatistics")}</span>
           <button onClick={claim} disabled={busy || !claimable || claimable === 0n}
             className="rounded bg-accent px-3 py-1 text-[11px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40">
-            領取獎勵
+            {t("ref.claimRewards")}
           </button>
         </h3>
         <div className="grid grid-cols-2 gap-1.5 p-3.5 sm:grid-cols-4">
-          <S k="邀請人數" v={stats.data ? String(stats.data.friends) : "—"} />
-          <S k="邀請交易量" v={stats.data ? `$${fmtNum(stats.data.estVol, 0)}` : "—"} />
-          <S k="總獎勵" v={stats.data ? `${fmtUsd(stats.data.totalRewards)} USD` : "—"} />
-          <S k="待領取" v={claimable !== undefined ? `${fmtUsd(claimable)} USD` : "—"} accent />
+          <S k={t("ref.invitees")} v={stats.data ? String(stats.data.friends) : "—"} />
+          <S k={t("ref.referredVolume")} v={stats.data ? `$${fmtNum(stats.data.estVol, 0)}` : "—"} />
+          <S k={t("ref.totalRewards")} v={stats.data ? `${fmtUsd(stats.data.totalRewards)} USD` : "—"} />
+          <S k={t("ref.claimable")} v={claimable !== undefined ? `${fmtUsd(claimable)} USD` : "—"} accent />
         </div>
         <p className="px-3.5 pb-3 text-[11px] text-mutedDim">
-          ＊ 邀請統計與被邀請人自交易佣金即時由鏈上事件計算；邀請交易量為估算值。
+          {t("ref.statsNote")}
         </p>
       </div>
 
       {/* Enter a code */}
       <div className="overflow-hidden rounded-lg border border-line bg-panel">
-        <h3 className="eyebrow border-b border-line px-3.5 py-2.5">輸入邀請碼 · Enter Code</h3>
+        <h3 className="eyebrow border-b border-line px-3.5 py-2.5">{t("ref.enterCode")}</h3>
         <div className="p-3.5">
           {referredBy ? (
             <div className="flex items-center gap-2 text-[13px]">
-              你以邀請碼
+              {t("ref.tradingUnderA")}
               <span className="tnum rounded bg-accentDim px-2 py-0.5 font-medium text-accent">{referredBy}</span>
-              交易，享 {friendDiscountPct}% 手續費折扣。
+              {t("ref.tradingUnderB")}{friendDiscountPct}% {t("ref.feeDiscount")}{t("ref.period")}
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
-              <p className="text-[12.5px] text-muted">輸入朋友嘅邀請碼，即享 {friendDiscountPct}% 手續費折扣（首次獲得佣金後鎖定）。</p>
+              <p className="text-[12.5px] text-muted">{t("ref.enterPromptA")}{friendDiscountPct}% {t("ref.feeDiscount")}{t("ref.enterPromptB")}</p>
               <div className="flex gap-2">
                 <div className="flex flex-1 items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent/60">
                   <input value={bindCode} onChange={(e) => setBindCode(clean(e.target.value))} placeholder="FRIENDCODE"
@@ -241,7 +243,7 @@ export default function Referral() {
                 </div>
                 <button onClick={bind} disabled={busy}
                   className="rounded-md border border-line px-5 text-[13px] font-semibold text-fg transition-colors hover:border-accent/40 disabled:opacity-40">
-                  套用
+                  {t("ref.apply")}
                 </button>
               </div>
             </div>
@@ -251,15 +253,15 @@ export default function Referral() {
 
       {/* Commission details */}
       <div className="overflow-hidden rounded-lg border border-line bg-panel">
-        <h3 className="eyebrow border-b border-line px-3.5 py-2.5">佣金明細 · Referral Commission Details</h3>
+        <h3 className="eyebrow border-b border-line px-3.5 py-2.5">{t("ref.commissionDetails")}</h3>
         {!stats.data || stats.data.records.length === 0 ? (
-          <div className="px-3.5 py-8 text-center text-[12px] text-mutedDim">No Referral Records</div>
+          <div className="px-3.5 py-8 text-center text-[12px] text-mutedDim">{t("ref.noRecords")}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-[12.5px]">
               <thead>
                 <tr className="eyebrow text-left">
-                  {["時間", "被邀請人", "佣金"].map((h) => (
+                  {[t("ref.colTime"), t("ref.colInvitee"), t("ref.colCommission")].map((h) => (
                     <th key={h} className="border-b border-line px-3.5 py-2 font-normal">{h}</th>
                   ))}
                 </tr>

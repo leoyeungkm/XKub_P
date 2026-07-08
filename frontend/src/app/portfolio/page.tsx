@@ -8,9 +8,16 @@ import { fmtNum, fmtUsd, fmtPrice } from "@/lib/format";
 import { ADDR, BASE_FEE_BPS, FEE_TIERS, marketAbi, tokenToUsd } from "@/config/contracts";
 import { useAccountSummary, useHistory, realizedPnl, type HistoryItem } from "@/lib/portfolio";
 import { useOneClickActions } from "@/lib/oneclickActions";
+import { useT } from "@/lib/i18n";
 
 const TABS = ["Positions", "Trade History", "Deposits/Withdrawals", "Funds Details"] as const;
 type Tab = (typeof TABS)[number];
+const TAB_KEY: Record<Tab, string> = {
+  "Positions": "pf.tabPositions",
+  "Trade History": "pf.tabTradeHistory",
+  "Deposits/Withdrawals": "pf.tabDeposits",
+  "Funds Details": "pf.tabFunds",
+};
 
 const signed = (v: bigint) => `${v >= 0n ? "+" : "-"}${fmtUsd(v < 0n ? -v : v)}`;
 const cls = (v: bigint) => (v >= 0n ? "text-green" : "text-red");
@@ -22,6 +29,7 @@ const fmtTime = (ts?: number) => {
 };
 
 export default function Portfolio() {
+  const t = useT();
   const { isConnected } = useAccount();
   const s = useAccountSummary();
   const { data: history } = useHistory();
@@ -32,7 +40,7 @@ export default function Portfolio() {
   if (!isConnected) {
     return (
       <div className="grid place-items-center py-32 text-[13px] text-muted">
-        Connect a wallet to view your portfolio.
+        {t("pf.connectWallet")}
       </div>
     );
   }
@@ -43,7 +51,7 @@ export default function Portfolio() {
       <div className="rounded-lg border border-line bg-panel p-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="eyebrow mb-1.5">Estimated Total Value</div>
+            <div className="eyebrow mb-1.5">{t("pf.estTotalValue")}</div>
             <div className="tnum text-[34px] font-semibold leading-none">
               {fmtUsd(s.accountValueUsd)} <span className="text-[16px] text-mutedDim">USD</span>
             </div>
@@ -53,22 +61,22 @@ export default function Portfolio() {
               onClick={() => setModal("deposit")}
               className="rounded-md bg-accent px-5 py-2.5 text-[13px] font-semibold text-bg transition-opacity hover:opacity-90"
             >
-              Deposit
+              {t("pf.deposit")}
             </button>
             <button
               onClick={() => setModal("withdraw")}
               className="rounded-md border border-line px-5 py-2.5 text-[13px] font-semibold text-fg transition-colors hover:border-accent/40"
             >
-              Withdraw
+              {t("pf.withdraw")}
             </button>
           </div>
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-          <Stat label="Available Balance" value={`${fmtUsd(s.tradingUsd)} USD`} />
-          <Stat label="Futures Bonus" value="0.00 USD" muted />
-          <Stat label="Total Realized PnL" value={`${signed(realized)} USD`} valueClass={cls(realized)} />
-          <Stat label="Total Unrealized PnL" value={`${signed(s.unrealizedUsd)} USD`} valueClass={cls(s.unrealizedUsd)} />
+          <Stat label={t("pf.availableBalance")} value={`${fmtUsd(s.tradingUsd)} USD`} />
+          <Stat label={t("pf.futuresBonus")} value="0.00 USD" muted />
+          <Stat label={t("pf.totalRealizedPnl")} value={`${signed(realized)} USD`} valueClass={cls(realized)} />
+          <Stat label={t("pf.totalUnrealizedPnl")} value={`${signed(s.unrealizedUsd)} USD`} valueClass={cls(s.unrealizedUsd)} />
         </div>
       </div>
 
@@ -77,15 +85,15 @@ export default function Portfolio() {
       {/* Tabs */}
       <div className="overflow-hidden rounded-lg border border-line bg-panel">
         <div className="flex gap-0.5 border-b border-line px-2 pt-2">
-          {TABS.map((t) => (
+          {TABS.map((tb) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={tb}
+              onClick={() => setTab(tb)}
               className={`rounded-t-md px-3.5 py-2 text-[12.5px] font-medium transition-colors ${
-                tab === t ? "bg-panel2 text-fg" : "text-muted hover:text-fg"
+                tab === tb ? "bg-panel2 text-fg" : "text-muted hover:text-fg"
               }`}
             >
-              {t}
+              {t(TAB_KEY[tb])}
             </button>
           ))}
         </div>
@@ -102,13 +110,13 @@ export default function Portfolio() {
         {tab === "Trade History" && (
           <HistoryTable
             rows={(history ?? []).filter((h) => h.kind === "open" || h.kind === "close" || h.kind === "liquidation")}
-            columns={["Time", "Action", "Market", "Side", "Size", "Price", "Fee", "PnL", "Realized"]}
+            columns={[t("pf.colTime"), t("pf.colAction"), t("pf.colMarket"), t("pf.colSide"), t("pf.colSize"), t("pf.colPrice"), t("pf.colFee"), t("pf.colPnl"), t("pf.colRealized")]}
             render={(h) => {
               const realized = h.kind === "close" && h.pnlUsd !== undefined ? h.pnlUsd - (h.feeUsd ?? 0n) : undefined;
               return (
                 <>
                   <Td muted>{fmtTime(h.timestamp)}</Td>
-                  <Td>{h.kind === "open" ? "Open" : h.kind === "close" ? "Close" : "Liquidated"}</Td>
+                  <Td>{h.kind === "open" ? t("pf.actionOpen") : h.kind === "close" ? t("pf.actionClose") : t("pf.actionLiquidated")}</Td>
                   <Td>{h.symbol}-PERP</Td>
                   <Td><Side isLong={h.isLong} /></Td>
                   <Td mono>{h.sizeUsd ? fmtUsd(h.sizeUsd, 0) : "—"}</Td>
@@ -129,12 +137,12 @@ export default function Portfolio() {
         {tab === "Deposits/Withdrawals" && (
           <HistoryTable
             rows={(history ?? []).filter((h) => h.kind === "deposit" || h.kind === "withdraw")}
-            columns={["Time", "Type", "Amount"]}
+            columns={[t("pf.colTime"), t("pf.colType"), t("pf.colAmount")]}
             render={(h) => (
               <>
                 <Td muted>{fmtTime(h.timestamp)}</Td>
                 <Td className={h.kind === "deposit" ? "text-green" : "text-red"}>
-                  {h.kind === "deposit" ? "Deposit" : "Withdraw"}
+                  {h.kind === "deposit" ? t("pf.deposit") : t("pf.withdraw")}
                 </Td>
                 <Td mono>{h.amountUsd ? `${fmtUsd(h.amountUsd)} KUSDT` : "—"}</Td>
               </>
@@ -144,10 +152,10 @@ export default function Portfolio() {
 
         {tab === "Funds Details" && (
           <div className="grid grid-cols-1 gap-px bg-line p-px sm:grid-cols-2">
-            <FundRow label="Wallet KUSDT" value={s.walletUsd} />
-            <FundRow label="Trading account (available)" value={s.tradingUsd} />
-            <FundRow label="Margin in positions" value={s.positionMarginUsd} />
-            <FundRow label="Unrealized PnL" value={s.unrealizedUsd} signed />
+            <FundRow label={t("pf.walletKusdt")} value={s.walletUsd} />
+            <FundRow label={t("pf.tradingAvailable")} value={s.tradingUsd} />
+            <FundRow label={t("pf.marginInPositions")} value={s.positionMarginUsd} />
+            <FundRow label={t("pf.unrealizedPnl")} value={s.unrealizedUsd} signed />
           </div>
         )}
       </div>
@@ -158,6 +166,7 @@ export default function Portfolio() {
 }
 
 function VipCard() {
+  const t = useT();
   const { address } = useAccount();
   const { data } = useReadContracts({
     contracts: address ? [
@@ -170,29 +179,29 @@ function VipCard() {
   const volume = Number(formatEther((data?.[1]?.result as bigint | undefined) ?? 0n));
 
   const feeAt = (discountBps: number) => (BASE_FEE_BPS * (1 - discountBps / 10000) / 100).toFixed(4);
-  const next = FEE_TIERS.find((t) => t.tier === tier + 1);
+  const next = FEE_TIERS.find((ft) => ft.tier === tier + 1);
   const progress = next && next.volumeUsd > 0 ? Math.min(100, (volume / next.volumeUsd) * 100) : 100;
 
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-panel">
       <h3 className="eyebrow flex items-center justify-between border-b border-line px-3.5 py-2.5">
-        <span>VIP 等級 · Fee Tier</span>
+        <span>{t("pf.feeTier")}</span>
         <span className="tnum rounded bg-accentDim px-2 py-0.5 text-[11px] font-medium text-accent">
-          {FEE_TIERS.find((t) => t.tier === tier)?.name ?? "Standard"}
+          {FEE_TIERS.find((ft) => ft.tier === tier)?.name ?? "Standard"}
         </span>
       </h3>
       <div className="flex flex-col gap-3 p-3.5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <div className="eyebrow mb-1">14 日交易量 · 14-Day Volume</div>
+            <div className="eyebrow mb-1">{t("pf.volume14d")}</div>
             <div className="tnum text-[20px] font-semibold">{fmtNum(volume, 0)} <span className="text-[12px] text-mutedDim">USD</span></div>
           </div>
           {next ? (
             <div className="text-right text-[12px] text-muted">
-              距離 {next.name} 仲需 <span className="tnum text-fg">{fmtNum(Math.max(0, next.volumeUsd - volume), 0)}</span> USD
+              {t("pf.toReachA")}{next.name}{t("pf.toReachB")}<span className="tnum text-fg">{fmtNum(Math.max(0, next.volumeUsd - volume), 0)}</span> USD
             </div>
           ) : (
-            <div className="text-[12px] text-accent">已達最高等級</div>
+            <div className="text-[12px] text-accent">{t("pf.maxTier")}</div>
           )}
         </div>
         {next && (
@@ -205,27 +214,27 @@ function VipCard() {
           <table className="w-full text-[12px]">
             <thead>
               <tr className="eyebrow text-left">
-                {["等級", "需 14 日交易量", "交易費率", "折扣"].map((h) => (
+                {[t("pf.thTier"), t("pf.thVolume"), t("pf.thFeeRate"), t("pf.thDiscount")].map((h) => (
                   <th key={h} className="whitespace-nowrap border-b border-line px-2.5 py-1.5 font-normal">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {FEE_TIERS.map((t) => (
-                <tr key={t.tier} className={`border-b border-lineSoft last:border-0 ${t.tier === tier ? "bg-accentDim/40" : ""}`}>
+              {FEE_TIERS.map((ft) => (
+                <tr key={ft.tier} className={`border-b border-lineSoft last:border-0 ${ft.tier === tier ? "bg-accentDim/40" : ""}`}>
                   <td className="px-2.5 py-2 font-medium">
-                    {t.name}{t.tier === tier && <span className="ml-1.5 text-[10px] text-accent">● 當前</span>}
+                    {ft.name}{ft.tier === tier && <span className="ml-1.5 text-[10px] text-accent">● {t("pf.current")}</span>}
                   </td>
-                  <td className="tnum px-2.5 py-2 text-muted">{t.volumeUsd > 0 ? `$${fmtNum(t.volumeUsd, 0)}+` : "—"}</td>
-                  <td className="tnum px-2.5 py-2">{feeAt(t.discountBps)}%</td>
-                  <td className="tnum px-2.5 py-2 text-green">{t.discountBps > 0 ? `-${t.discountBps / 100}%` : "—"}</td>
+                  <td className="tnum px-2.5 py-2 text-muted">{ft.volumeUsd > 0 ? `$${fmtNum(ft.volumeUsd, 0)}+` : "—"}</td>
+                  <td className="tnum px-2.5 py-2">{feeAt(ft.discountBps)}%</td>
+                  <td className="tnum px-2.5 py-2 text-green">{ft.discountBps > 0 ? `-${ft.discountBps / 100}%` : "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
         <p className="text-[11px] leading-relaxed text-mutedDim">
-          等級按過去 14 日交易量自動升級（成交即時計入，14 日後滾出窗口）。交易越多，手續費越低。
+          {t("pf.tierNote")}
         </p>
       </div>
     </div>
@@ -253,10 +262,11 @@ function FundRow({ label, value, signed: isSigned }: { label: string; value: big
 }
 
 function Side({ isLong }: { isLong?: boolean }) {
+  const t = useT();
   if (isLong === undefined) return <>—</>;
   return (
     <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${isLong ? "bg-greenDim text-green" : "bg-redDim text-red"}`}>
-      {isLong ? "Long" : "Short"}
+      {isLong ? t("trade.long") : t("trade.short")}
     </span>
   );
 }
@@ -272,8 +282,9 @@ function HistoryTable({ rows, columns, render }: {
   columns: string[];
   render: (h: HistoryItem) => React.ReactNode;
 }) {
+  const t = useT();
   if (rows.length === 0) {
-    return <div className="px-3.5 py-8 text-center text-[12px] text-mutedDim">No records yet</div>;
+    return <div className="px-3.5 py-8 text-center text-[12px] text-mutedDim">{t("pf.noRecords")}</div>;
   }
   return (
     <table className="w-full text-[12.5px]">
@@ -298,6 +309,7 @@ function HistoryTable({ rows, columns, render }: {
 function CollateralModal({ mode, onClose, available, wallet }: {
   mode: "deposit" | "withdraw"; onClose: () => void; available: bigint; wallet: bigint;
 }) {
+  const t = useT();
   const oc = useOneClickActions();
   const [amount, setAmount] = useState("");
   const max = mode === "deposit" ? wallet : available;
@@ -311,14 +323,14 @@ function CollateralModal({ mode, onClose, available, wallet }: {
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-[380px] overflow-hidden rounded-xl border border-line bg-panel shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-line bg-panel2 px-5 py-3.5">
-          <span className="text-[14px] font-semibold">{mode === "deposit" ? "Deposit to trading account" : "Withdraw to wallet"}</span>
+          <span className="text-[14px] font-semibold">{mode === "deposit" ? t("pf.depositToTrading") : t("pf.withdrawToWallet")}</span>
           <button onClick={onClose} className="text-muted hover:text-fg">✕</button>
         </div>
         <div className="flex flex-col gap-3 p-5">
           <div className="flex justify-between text-[11px]">
-            <span className="eyebrow">Amount</span>
+            <span className="eyebrow">{t("pf.amount")}</span>
             <button className="tnum text-accent" onClick={() => setAmount(String(Math.floor(Number(formatEther(tokenToUsd(max))) * 100) / 100))}>
-              Max {fmtUsd(max)}
+              {t("pf.max")} {fmtUsd(max)}
             </button>
           </div>
           <div className="flex items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent/60">
@@ -333,12 +345,10 @@ function CollateralModal({ mode, onClose, available, wallet }: {
             onClick={submit} disabled={oc.busy}
             className="rounded-md bg-accent py-2.5 text-[14px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40"
           >
-            {oc.busy ? "Confirming…" : mode === "deposit" ? "Deposit" : "Withdraw"}
+            {oc.busy ? t("pf.confirming") : mode === "deposit" ? t("pf.deposit") : t("pf.withdraw")}
           </button>
           <p className="text-[11px] leading-relaxed text-mutedDim">
-            {mode === "deposit"
-              ? "Moves KUSDT into your on-chain trading account so 1-click orders draw from it."
-              : "Returns available trading balance to your wallet. Margin locked in open positions isn't withdrawable."}
+            {mode === "deposit" ? t("pf.depositHelp") : t("pf.withdrawHelp")}
           </p>
         </div>
       </div>

@@ -14,7 +14,7 @@ window.XKUB_CONFIG = {
     "XKubReferral": "0xceb43c3055F99c85aA65B3B51C0DaA8fC0cb0a86"
   },
   "multicall3": "0x1421cb2dFA99A369ad162C83E0ACc171C951c204",
-  "relayerUrl": "http://localhost:8799/order",
+  "relayerUrl": "https://xkub-keeper.onrender.com/order",
   "markets": [
     {
       "symbol": "BTC",

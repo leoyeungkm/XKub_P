@@ -12,7 +12,8 @@ import toast from "react-hot-toast";
 import { ADDR, b32, chain, erc20Abi, kubTxOverrides, referralAbi, routerAbi, tokenToUsd, usdToToken } from "@/config/contracts";
 import { errMsg, fmtNum } from "@/lib/format";
 import { ensureAgentAccount, useOneClick } from "@/lib/oneclick";
-import { useFaucet, FaucetError } from "@/lib/faucet";
+import { useFaucet } from "@/lib/faucet";
+import { openFaucet } from "@/components/FaucetModal";
 import { useT } from "@/lib/i18n";
 
 const seenKey = (o: string) => `xkub.onboard.${o.toLowerCase()}`;
@@ -30,16 +31,8 @@ export default function OnboardingModal() {
   const t = useT();
   const runFaucet = useFaucet();
 
-  const getFaucet = async () => {
-    if (!address) return;
-    await toast.promise(runFaucet(), {
-      loading: t("faucet.loading"), success: t("faucet.success"),
-      error: (e) => t(e instanceof FaucetError && e.kind === "rate-limited" ? "faucet.rateLimited"
-        : e instanceof FaucetError && e.kind === "empty" ? "faucet.empty" : "faucet.error"),
-    }).catch(() => {});
-    refetchWallet();
-    refetchKub();
-  };
+  // Opens the faucet popup (platform claim / self-mint KUSDT / official faucet).
+  const getFaucet = () => openFaucet();
 
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0); // 0 terms · 1 enable+deposit
@@ -55,7 +48,7 @@ export default function OnboardingModal() {
   });
   const walletUsd = walletBal !== undefined ? Number(formatEther(tokenToUsd(walletBal))) : 0;
 
-  const { data: kubBal, refetch: refetchKub } = useBalance({
+  const { data: kubBal } = useBalance({
     address, query: { enabled: !!address, refetchInterval: 8000 },
   });
   // A brand-new wallet has neither gas (KUB) nor collateral (KUSDT) — lock the

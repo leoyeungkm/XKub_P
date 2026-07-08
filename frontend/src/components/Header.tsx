@@ -10,7 +10,7 @@ import toast from "react-hot-toast";
 import ThemeToggle from "./ThemeToggle";
 import { useT, LangToggle } from "@/lib/i18n";
 import { ADDR, CFG, chain, erc20Abi, tokenToUsd } from "@/config/contracts";
-import { useFaucet, FaucetError } from "@/lib/faucet";
+import { openFaucet } from "@/components/FaucetModal";
 import { shortAddr, errMsg, fmtUsd } from "@/lib/format";
 import { PRIVY_ENABLED } from "@/lib/privy";
 import PrivyConnect from "./PrivyConnect";
@@ -23,7 +23,6 @@ export default function Header() {
   const client = usePublicClient();
   const pathname = usePathname();
   const t = useT();
-  const runFaucet = useFaucet();
 
   const { data: kubBal } = useBalance({
     address,
@@ -37,14 +36,9 @@ export default function Header() {
     query: { enabled: !!address, refetchInterval: 8000 },
   });
 
-  const faucet = async () => {
+  const faucet = () => {
     if (!address) return toast.error(t("toast.connectFirst"));
-    toast.promise(runFaucet(), {
-      loading: t("faucet.loading"),
-      success: t("faucet.success"),
-      error: (e) => t(e instanceof FaucetError && e.kind === "rate-limited" ? "faucet.rateLimited"
-        : e instanceof FaucetError && e.kind === "empty" ? "faucet.empty" : "faucet.error"),
-    });
+    openFaucet(); // popup: platform claim / self-mint KUSDT / official faucet link
   };
 
   return (

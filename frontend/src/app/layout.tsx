@@ -4,6 +4,7 @@ import "./globals.css";
 import Providers from "@/components/Providers";
 import Header from "@/components/Header";
 import OnboardingModal from "@/components/OnboardingModal";
+import FaucetModal from "@/components/FaucetModal";
 import RefCapture from "@/components/RefCapture";
 import { LanguageProvider } from "@/lib/i18n";
 
@@ -43,6 +44,7 @@ export default function RootLayout({
             <Header />
             {children}
             <OnboardingModal />
+            <FaucetModal />
             <RefCapture />
           </LanguageProvider>
         </Providers>

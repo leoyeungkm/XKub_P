@@ -7,7 +7,7 @@
 //      the first time. 1–2 popups total instead of 4–6.
 import { useEffect, useState } from "react";
 import { formatEther, parseEther } from "viem";
-import { useAccount, useChainId, usePublicClient, useReadContract, useSwitchChain, useWriteContract } from "wagmi";
+import { useAccount, useBalance, useChainId, usePublicClient, useReadContract, useSwitchChain, useWriteContract } from "wagmi";
 import toast from "react-hot-toast";
 import { ADDR, b32, chain, erc20Abi, kubTxOverrides, referralAbi, routerAbi, tokenToUsd, usdToToken } from "@/config/contracts";
 import { errMsg, fmtNum } from "@/lib/format";
@@ -38,6 +38,7 @@ export default function OnboardingModal() {
         : e instanceof FaucetError && e.kind === "empty" ? "faucet.empty" : "faucet.error"),
     }).catch(() => {});
     refetchWallet();
+    refetchKub();
   };
 
   const [open, setOpen] = useState(false);
@@ -53,6 +54,13 @@ export default function OnboardingModal() {
     query: { enabled: !!address, refetchInterval: 8000 },
   });
   const walletUsd = walletBal !== undefined ? Number(formatEther(tokenToUsd(walletBal))) : 0;
+
+  const { data: kubBal, refetch: refetchKub } = useBalance({
+    address, query: { enabled: !!address, refetchInterval: 8000 },
+  });
+  // A brand-new wallet has neither gas (KUB) nor collateral (KUSDT) — lock the
+  // deposit/setup section and steer them to the faucet first.
+  const funded = (kubBal?.value ?? 0n) >= parseEther("0.005") && walletUsd >= 1;
 
   const { data: myCodeHex } = useReadContract({
     address: ADDR.referral, abi: referralAbi, functionName: "ownerCode",
@@ -200,8 +208,10 @@ export default function OnboardingModal() {
               {t("onb.setupDesc")}
             </p>
 
-            {/* Testnet notice + one-tap faucet for everyone */}
-            <div className="flex items-center gap-2 rounded-md border border-accent/30 bg-accentDim/40 px-3 py-2 text-[11.5px] text-muted">
+            {/* Testnet notice + one-tap faucet; extra-prominent while unfunded */}
+            <div className={`flex items-center gap-2 rounded-md border px-3 py-2 text-[11.5px] text-muted ${
+              funded ? "border-accent/30 bg-accentDim/40" : "border-accent/70 bg-accentDim/60"
+            }`}>
               <span className="leading-relaxed">{t("onb.testnet")}</span>
               <button
                 onClick={getFaucet}
@@ -210,50 +220,56 @@ export default function OnboardingModal() {
                 {t("onb.getTestFunds")}
               </button>
             </div>
-
-            <div>
-              <div className="mb-1.5 flex justify-between text-[11px]">
-                <span className="eyebrow">{t("onb.depositLabel")}</span>
-                <button className="tnum text-accent" onClick={() => setAmount(String(Math.floor(walletUsd * 100) / 100))}>
-                  {t("onb.wallet")} {fmtNum(walletUsd)} USD
-                </button>
-              </div>
-              <div className="flex items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent/60">
-                <input type="number" min="0" placeholder="0.00" value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="tnum w-full bg-transparent py-2.5 text-[15px] outline-none" />
-                <span className="eyebrow">KUSDT</span>
-              </div>
-              <div className="mt-1.5 grid grid-cols-4 gap-1">
-                {[50, 100, 500, 1000].map((v) => (
-                  <button key={v} onClick={() => setAmount(String(v))}
-                    className="tnum rounded bg-panel2 py-1.5 text-[11.5px] text-muted transition-colors hover:text-fg">${v}</button>
-                ))}
-              </div>
-            </div>
-
-            {ADDR.referral && !hasCode && (
-              <div>
-                <div className="eyebrow mb-1.5">{t("onb.refCode")}</div>
-                <div className="flex items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent/60">
-                  <input value={refCode} onChange={(e) => setRefCode(clean(e.target.value))} placeholder="YOURCODE"
-                    className="tnum w-full bg-transparent py-2 text-[14px] uppercase tracking-wide outline-none" />
-                </div>
-              </div>
+            {!funded && (
+              <p className="-mt-2 text-[11px] text-accent">{t("onb.needFunds")}</p>
             )}
 
-            <button onClick={enableAndDeposit} disabled={busy}
-              className="rounded-md bg-accent py-2.5 text-[14px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40">
-              {busy ? t("onb.settingUp") : t("onb.setupBtn")}
-            </button>
-            <button onClick={() => setAmount("")}
-              className="text-[12px] text-mutedDim transition-colors hover:text-muted"
-              title={t("onb.skipDeposit")}>
-              {t("onb.skipDeposit")}
-            </button>
-            <p className="text-[11px] leading-relaxed text-mutedDim">
-              {t("onb.setupNote")}
-            </p>
+            {/* Deposit + setup — locked until the wallet has test funds */}
+            <div className={`flex flex-col gap-4 ${funded ? "" : "pointer-events-none select-none opacity-35"}`}>
+              <div>
+                <div className="mb-1.5 flex justify-between text-[11px]">
+                  <span className="eyebrow">{t("onb.depositLabel")}</span>
+                  <button className="tnum text-accent" onClick={() => setAmount(String(Math.floor(walletUsd * 100) / 100))}>
+                    {t("onb.wallet")} {fmtNum(walletUsd)} USD
+                  </button>
+                </div>
+                <div className="flex items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent/60">
+                  <input type="number" min="0" placeholder="0.00" value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="tnum w-full bg-transparent py-2.5 text-[15px] outline-none" />
+                  <span className="eyebrow">KUSDT</span>
+                </div>
+                <div className="mt-1.5 grid grid-cols-4 gap-1">
+                  {[50, 100, 500, 1000].map((v) => (
+                    <button key={v} onClick={() => setAmount(String(v))}
+                      className="tnum rounded bg-panel2 py-1.5 text-[11.5px] text-muted transition-colors hover:text-fg">${v}</button>
+                  ))}
+                </div>
+              </div>
+
+              {ADDR.referral && !hasCode && (
+                <div>
+                  <div className="eyebrow mb-1.5">{t("onb.refCode")}</div>
+                  <div className="flex items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent/60">
+                    <input value={refCode} onChange={(e) => setRefCode(clean(e.target.value))} placeholder="YOURCODE"
+                      className="tnum w-full bg-transparent py-2 text-[14px] uppercase tracking-wide outline-none" />
+                  </div>
+                </div>
+              )}
+
+              <button onClick={enableAndDeposit} disabled={busy || !funded}
+                className="rounded-md bg-accent py-2.5 text-[14px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40">
+                {busy ? t("onb.settingUp") : t("onb.setupBtn")}
+              </button>
+              <button onClick={() => setAmount("")}
+                className="text-[12px] text-mutedDim transition-colors hover:text-muted"
+                title={t("onb.skipDeposit")}>
+                {t("onb.skipDeposit")}
+              </button>
+              <p className="text-[11px] leading-relaxed text-mutedDim">
+                {t("onb.setupNote")}
+              </p>
+            </div>
           </div>
         )}
       </div>

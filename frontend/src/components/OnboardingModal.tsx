@@ -171,7 +171,7 @@ export default function OnboardingModal() {
 
         {step === 1 && (
           <div className="flex flex-col gap-4 p-5">
-            <div className="text-[14px] font-semibold">啟用一鍵交易並入金</div>
+            <div className="text-[14px] font-semibold">設定交易帳戶並入金</div>
             <p className="text-[12.5px] leading-relaxed text-muted">
               一筆交易同時完成：授權代理密鑰（免彈窗交易）、存入交易保證金。之後交易走 relayer 代付 gas，零彈窗零 gas，資金隨時可於 Portfolio 提取。
             </p>
@@ -208,12 +208,12 @@ export default function OnboardingModal() {
 
             <button onClick={enableAndDeposit} disabled={busy}
               className="rounded-md bg-accent py-2.5 text-[14px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-40">
-              {busy ? "設定中…" : "一鍵啟用並入金"}
+              {busy ? "設定中…" : "設定並入金"}
             </button>
             <button onClick={() => setAmount("")}
               className="text-[12px] text-mutedDim transition-colors hover:text-muted"
-              title="只啟用一鍵交易，稍後再入金">
-              暫不入金，只啟用一鍵交易
+              title="只設定帳戶，稍後再入金">
+              暫不入金，只設定帳戶
             </button>
             <p className="text-[11px] leading-relaxed text-mutedDim">
               授權代理、入金、生成邀請碼一筆交易完成。交易 gas 由平台代付,你唔使入 KUB。首次需額外一次 KUSDT 授權（approve）。

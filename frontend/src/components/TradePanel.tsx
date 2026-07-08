@@ -279,7 +279,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
               onClick={() => setShowUnitPref((v) => !v)}
               className="eyebrow flex items-center gap-1 transition-colors hover:text-fg"
             >
-              {mode === "cost" ? "Cost" : "Order Size"}
+              {mode === "cost" ? t("trade.cost") : t("trade.orderSize")}
               {mode === "size" && unit === "asset" ? ` · ${symbol}` : " · USD"} ▾
             </button>
             <span className="tnum text-muted">{t("trade.available")} {fmtNum(availableUsd)} USD</span>
@@ -289,7 +289,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
           {showUnitPref && (
             <div className="mb-2 flex flex-col gap-2 rounded-md border border-line bg-bg p-2.5">
               <div>
-                <div className="eyebrow mb-1">Order Size unit</div>
+                <div className="eyebrow mb-1">{t("trade.orderSizeUnit")}</div>
                 <div className="grid grid-cols-2 gap-1">
                   <PrefBtn active={unit === "asset"} onClick={() => { setUnit("asset"); setMode("size"); }}>{symbol}</PrefBtn>
                   <PrefBtn active={unit === "usd"} onClick={() => setUnit("usd")}>USD</PrefBtn>
@@ -301,8 +301,8 @@ export default function TradePanel({ symbol }: { symbol: string }) {
               <div>
                 <div className="eyebrow mb-1">Input by</div>
                 <div className="grid grid-cols-2 gap-1">
-                  <PrefBtn active={mode === "size"} onClick={() => setMode("size")}>Order Size</PrefBtn>
-                  <PrefBtn active={mode === "cost"} onClick={() => setMode("cost")}>Cost</PrefBtn>
+                  <PrefBtn active={mode === "size"} onClick={() => setMode("size")}>{t("trade.orderSize")}</PrefBtn>
+                  <PrefBtn active={mode === "cost"} onClick={() => setMode("cost")}>{t("trade.cost")}</PrefBtn>
                 </div>
                 <p className="mt-1 text-[10.5px] leading-snug text-mutedDim">
                   {mode === "cost"
@@ -352,17 +352,17 @@ export default function TradePanel({ symbol }: { symbol: string }) {
 
         {/* order preview */}
         <div className="flex flex-col gap-1.5 rounded-md bg-bg px-3 py-3 text-[12px]">
-          <Row k={`Amount (${symbol})`} v={amountTokens > 0 ? `≈ ${fmtNum(amountTokens, 6)} ${symbol}` : "—"} />
-          <Row k="Order value" v={sizeUsd ? `${fmtNum(sizeUsd)} USD` : "—"} />
-          <Row k="Cost (collateral)" v={colNum > 0 ? `${fmtNum(colNum)} USD` : "—"} />
-          <Row k={`Max ${isLong ? "long" : "short"}`} v={maxLongUsd > 0 ? `${fmtNum(maxLongUsd, 0)} USD` : "—"} />
-          <Row k="Est. liq. price" v={liqPrice ? `$${fmtNum(liqPrice, liqPrice >= 100 ? 1 : 4)}` : "—"} accent />
-          <Row k="TP / SL" v="None" />
+          <Row k={`${t("trade.amount")} (${symbol})`} v={amountTokens > 0 ? `≈ ${fmtNum(amountTokens, 6)} ${symbol}` : "—"} />
+          <Row k={t("trade.orderValue")} v={sizeUsd ? `${fmtNum(sizeUsd)} USD` : "—"} />
+          <Row k={t("trade.collateral")} v={colNum > 0 ? `${fmtNum(colNum)} USD` : "—"} />
+          <Row k={`${t("trade.max")} ${isLong ? t("trade.long") : t("trade.short")}`} v={maxLongUsd > 0 ? `${fmtNum(maxLongUsd, 0)} USD` : "—"} />
+          <Row k={t("trade.estLiq")} v={liqPrice ? `$${fmtNum(liqPrice, liqPrice >= 100 ? 1 : 4)}` : "—"} accent />
+          <Row k={t("trade.tpsl")} v={t("trade.none")} />
         </div>
 
         {/* slippage */}
         <div>
-          <div className="eyebrow mb-1.5">Max slippage</div>
+          <div className="eyebrow mb-1.5">{t("trade.maxSlippage")}</div>
           <div className="grid grid-cols-4 gap-1">
             {SLIPPAGE_OPTS.map((o, i) => (
               <button
@@ -390,18 +390,17 @@ export default function TradePanel({ symbol }: { symbol: string }) {
             !address ? "bg-mutedDim" : isLong ? "bg-green" : "bg-red"
           }`}
         >
-          {!address ? "請先連接錢包" : busy ? "Submitting…" : oppositeOpen ? `先平掉 ${symbol} ${isLong ? "空" : "多"}倉`
-            : `${oneClick.active ? "⚡ " : ""}${isLong ? t("trade.buyLong") : t("trade.sellShort")} ${symbol}`}
+          {!address ? t("toast.connectFirst") : busy ? t("trade.submitting") : oppositeOpen ? t("trade.closeOpposite")
+            : `${isLong ? t("trade.buyLong") : t("trade.sellShort")} ${symbol}`}
         </button>
 
         <div className="text-[11px] leading-relaxed text-mutedDim">
-          Filled by a keeper at the next fresh oracle price for front-run
-          protection. Cancel an unfilled order after 60s.
+          {t("trade.keeperNote")}
         </div>
       </div>
 
       {/* instrument info */}
-      <Section title="Instrument Info">
+      <Section title={t("info.title")}>
         <FeeRow
           effBps={myFee.effectiveFeeBps ?? fees.feeBps}
           baseBps={fees.feeBps}
@@ -409,14 +408,14 @@ export default function TradePanel({ symbol }: { symbol: string }) {
           tierName={myFee.tierName}
           tier={myFee.tier}
         />
-        <Row k="LP / holding fee (per h)" v={borrowRate !== null ? `${borrowRate.toFixed(4)}%` : "—"} />
-        <Row k="Maintenance margin rate" v={fees.maintenanceBps !== null ? `${(fees.maintenanceBps / 100).toFixed(2)}%` : "—"} />
+        <Row k={t("info.borrowFee")} v={borrowRate !== null ? `${borrowRate.toFixed(4)}%` : "—"} />
+        <Row k={t("info.maintenance")} v={fees.maintenanceBps !== null ? `${(fees.maintenanceBps / 100).toFixed(2)}%` : "—"} />
         <Row
-          k="Rapid-close LP fee"
+          k={t("info.rapidClose")}
           v={fees.rapidFeeBps !== null && fees.rapidWindow !== null
             ? `${(fees.rapidFeeBps / 100).toFixed(2)}% · <${fees.rapidWindow}s` : "—"}
         />
-        <Row k="Execution fee" v={minExecFee !== undefined ? `${formatEther(minExecFee)} KUB` : "—"} />
+        <Row k={t("info.execFee")} v={minExecFee !== undefined ? `${formatEther(minExecFee)} KUB` : "—"} />
       </Section>
 
       {/* account overview (isolated) */}
@@ -472,11 +471,12 @@ function Row({ k, v, accent, tone }: { k: string; v: string; accent?: boolean; t
 function FeeRow({ effBps, baseBps, sizeUsd, tierName, tier }: {
   effBps: number | null; baseBps: number | null; sizeUsd: number; tierName: string; tier: number;
 }) {
+  const t = useT();
   const discounted = effBps !== null && baseBps !== null && effBps < baseBps;
   return (
     <div className="flex justify-between">
       <span className="flex items-center gap-1.5 text-muted">
-        Open fee
+        {t("info.openFee")}
         {tier > 0 && (
           <span className="rounded bg-accentDim px-1 py-0.5 text-[10px] font-medium text-accent">{tierName}</span>
         )}

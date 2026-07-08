@@ -3,10 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { parseEther, formatEther } from "viem";
 import { useAccount, usePublicClient, useReadContract } from "wagmi";
-import { useKubWrite } from "@/lib/kubWrite";
 import toast from "react-hot-toast";
 import {
-  ADDR, MARKETS, b32, erc20Abi, marketAbi, routerAbi, usdToToken, tokenToUsd,
+  ADDR, MARKETS, b32, marketAbi, routerAbi, usdToToken, tokenToUsd,
 } from "@/config/contracts";
 import { errMsg, fmtNum, fmtPrice, fmtUsd } from "@/lib/format";
 import { getAgentClients, useOneClick } from "@/lib/oneclick";
@@ -38,7 +37,6 @@ const fmtK = (n: number) =>
 export default function TradePanel({ symbol }: { symbol: string }) {
   const { address } = useAccount();
   const client = usePublicClient();
-  const { writeContract } = useKubWrite();
   const oraclePrice = useOraclePrice(symbol);
   const price = useDisplayPrice(symbol, oraclePrice); // live CEX for preview, oracle fallback
   const fees = useMarketFees(symbol);
@@ -66,16 +64,10 @@ export default function TradePanel({ symbol }: { symbol: string }) {
   const { data: minCollateral } = useReadContract({
     address: ADDR.market, abi: marketAbi, functionName: "minCollateralUsd",
   });
-  const { data: balance } = useReadContract({
-    address: ADDR.kusdt, abi: erc20Abi, functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    query: { enabled: !!address, refetchInterval: 8000 },
-  });
-
   const priceNum = Number(formatEther(price));
-  const availableUsd = oneClick.active
-    ? Number(formatEther(tokenToUsd(oneClick.balance)))
-    : balance !== undefined ? Number(formatEther(tokenToUsd(balance))) : 0;
+  // Trades draw only from the Trading balance (router-held collateral), never the
+  // wallet — so that's what's "available" to size a position with.
+  const availableUsd = Number(formatEther(tokenToUsd(oneClick.balance)));
 
   // Derive collateral + position size from the chosen input mode/unit
   const amt = Number(amount || "0");
@@ -143,9 +135,22 @@ export default function TradePanel({ symbol }: { symbol: string }) {
 
       const fee = minExecFee ?? 0n;
 
-      // Gasless path: agent signs, relayer submits & pays gas (no KUB needed).
-      // Retry once on a transient failure before falling back.
-      if (oneClick.active && gaslessAvailable() && oneClick.balance >= collateralTokens) {
+      // Trades draw ONLY from the Trading balance — never the wallet. So one-click
+      // must be enabled, and the collateral must fit the Trading balance.
+      if (!oneClick.active) {
+        removePendingOpen(symbol, isLong);
+        toast.error("請先啟用一鍵交易（資金由 Trading balance 出）");
+        window.dispatchEvent(new Event("xkub:getstarted"));
+        return;
+      }
+      if (oneClick.balance < collateralTokens) {
+        removePendingOpen(symbol, isLong);
+        toast.error("Trading balance 不足 — 請先入金到交易帳戶");
+        return;
+      }
+
+      // Gasless path (relayer pays gas). Retry once on a transient failure.
+      if (gaslessAvailable()) {
         const gasless = () => submitGaslessOrder({
           owner: address, symbol, isLong, isIncrease: true,
           collateralTokens, sizeDeltaUsd: sizeUsd18, acceptablePrice: acceptable, client,
@@ -159,55 +164,29 @@ export default function TradePanel({ symbol }: { symbol: string }) {
           refreshPositions();
           return;
         } catch {
-          toast("Relayer unavailable — falling back to on-chain 1-click");
+          toast("Relayer 暫時不可用，改用鏈上一鍵…");
         }
       }
 
-      // 1-click path: agent signs & submits on-chain, collateral from the balance
-      if (oneClick.active) {
-        if (oneClick.balance < collateralTokens) {
-          toast("1-click balance too low — order goes via wallet instead");
-        } else if (oneClick.agentGas < fee * 2n) {
-          toast("Agent gas low — top it up. Using wallet.");
-        } else {
-          const agents = getAgentClients(address)!;
-          const hash = await agents.wallet.writeContract({
-            address: ADDR.router, abi: routerAbi, functionName: "createIncreaseRequestFor",
-            args: [address, b32(symbol), isLong, collateralTokens, sizeUsd18, acceptable],
-            value: fee,
-          });
-          await client.waitForTransactionReceipt({ hash });
-          toast.success("Order queued (1-click) — keeper executes at next fresh price");
-          setAmount("");
-          oneClick.refetch();
-          refreshPositions();
-          return;
-        }
-      }
-
-      const allowance = await client.readContract({
-        address: ADDR.kusdt, abi: erc20Abi, functionName: "allowance",
-        args: [address, ADDR.router],
-      });
-      if (allowance < collateralTokens) {
-        toast("Approving KUSDT…");
-        const h = await writeContract({
-          address: ADDR.kusdt, abi: erc20Abi, functionName: "approve",
-          args: [ADDR.router, 2n ** 256n - 1n],
+      // On-chain 1-click fallback: agent submits (still from the Trading balance).
+      if (oneClick.agentGas >= fee * 2n) {
+        const agents = getAgentClients(address)!;
+        const hash = await agents.wallet.writeContract({
+          address: ADDR.router, abi: routerAbi, functionName: "createIncreaseRequestFor",
+          args: [address, b32(symbol), isLong, collateralTokens, sizeUsd18, acceptable],
+          value: fee,
         });
-        await client.waitForTransactionReceipt({ hash: h });
+        await client.waitForTransactionReceipt({ hash });
+        toast.success("Order queued (1-click) — keeper executes at next fresh price");
+        setAmount("");
+        oneClick.refetch();
+        refreshPositions();
+        return;
       }
 
-      toast("Submitting order…");
-      const hash = await writeContract({
-        address: ADDR.router, abi: routerAbi, functionName: "createIncreaseRequest",
-        args: [b32(symbol), isLong, collateralTokens, sizeUsd18, acceptable],
-        value: fee,
-      });
-      await client.waitForTransactionReceipt({ hash });
-      toast.success("Order queued — keeper executes at next fresh price");
-      setAmount("");
-      refreshPositions();
+      // Neither path available (relayer down + agent has no gas).
+      removePendingOpen(symbol, isLong);
+      toast.error("Relayer 暫時不可用,且代理無 gas — 請稍後再試");
     } catch (e) {
       removePendingOpen(symbol, isLong); // order failed — drop the placeholder
       toast.error(errMsg(e));

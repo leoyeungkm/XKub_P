@@ -255,7 +255,7 @@ function startRelayer(router, oracle, maxDeviationBps, kusdt) {
           const ipLimited = !!ip && stamps.length >= IP_MAX_CLAIMS;
           const reserveOk = (await provider.getBalance(keeper.address)) >= FAUCET_KUB + FAUCET_RESERVE;
           let sentKub = false;
-          if (!ipLimited && reserveOk && (await provider.getBalance(addr)) < FAUCET_KUB / 2n) {
+          if (!ipLimited && reserveOk && (await provider.getBalance(addr)) < FAUCET_KUB) {
             const tx = await sendLocked(() => keeper.sendTransaction({ to: addr, value: FAUCET_KUB, ...TX(), gasLimit: 21000n }));
             await tx.wait();
             sentKub = true;

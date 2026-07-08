@@ -131,7 +131,7 @@ export default function OnboardingModal() {
           toast(t("onb.approving"));
           const h = await writeContractAsync({
             address: ADDR.kusdt, abi: erc20Abi, functionName: "approve", args: [ADDR.router, 2n ** 256n - 1n],
-            ...fees,
+            ...fees, gas: 80_000n, // explicit limit — stops MetaMask padding it and over-quoting the cost
           });
           await client.waitForTransactionReceipt({ hash: h, timeout: 90_000 });
         }
@@ -145,6 +145,7 @@ export default function OnboardingModal() {
       const h = await writeContractAsync({
         address: ADDR.router, abi: routerAbi, functionName: "setupAccount",
         args: [agent.address, tokens, code], value: 0n, ...fees,
+        gas: 450_000n, // explicit limit — stops MetaMask padding it and over-quoting the cost
       });
       await client.waitForTransactionReceipt({ hash: h, timeout: 90_000 });
       toast.success(t("onb.setupDone"));

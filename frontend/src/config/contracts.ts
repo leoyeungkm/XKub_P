@@ -157,9 +157,9 @@ export async function requestFaucet(address: string): Promise<FaucetOutcome> {
 // never comes). Force legacy (Type-0) with an explicit gasPrice on every write
 // that goes through a user's injected wallet.
 const GWEI = 1_000_000_000n;
-const MIN_GAS_PRICE = 60n * GWEI;  // floor — above the ~55 gwei testnet min
-const MAX_GAS_PRICE = 100n * GWEI; // cap — ~100 mines fine (the keeper uses it); keeping it
-                                   // low means the 0.05 KUB faucet covers a full onboarding
+const MIN_GAS_PRICE = 60n * GWEI; // floor — above the ~55 gwei testnet min
+const MAX_GAS_PRICE = 70n * GWEI; // cap — keeps a full onboarding (approve + setup)
+                                  // within the 0.05 KUB faucet drip
 
 export async function kubTxOverrides(
   client: { getGasPrice: () => Promise<bigint> },

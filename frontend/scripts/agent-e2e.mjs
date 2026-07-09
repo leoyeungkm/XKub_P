@@ -9,7 +9,9 @@ const A = cfg.addresses;
 const transport = http(cfg.rpcUrl);
 const pub = createPublicClient({ transport });
 
-const OWNER_PK = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"; // hardhat #1
+// Test owner key — defaults to the well-known public Hardhat account #1 (no real
+// funds); override with E2E_OWNER_PK for a funded testnet run.
+const OWNER_PK = process.env.E2E_OWNER_PK ?? "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 const owner = privateKeyToAccount(OWNER_PK);
 const agent = privateKeyToAccount(generatePrivateKey());
 const ownerW = createWalletClient({ account: owner, transport });

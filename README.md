@@ -1,10 +1,14 @@
-# XKub
+# XKub Perp — Bitkub Chain native perpetual futures DEX
 
-DeFi protocol suite for **KUB Chain (Bitkub Chain)** — the centrepiece is **XKub Perp**,
-a GMX-style perpetual futures protocol with an LP pool as counterparty, two-step
-anti-front-run execution, and one-click trading.
+The first native perpetual-futures DEX on **KUB Chain (Bitkub Chain)** — GMX-style
+synthetic perps with a single KUSDT liquidity pool as the counterparty, Hyperliquid-style
+gasless & pop-up-free trading, and a self-built multi-source oracle.
 
-> ⚠️ Testnet-stage software. Not audited. Do not use with real funds.
+**▶ Live on testnet:** https://xkub.vercel.app
+**Mechanism / grant overview:** [`docs/GRANT-OVERVIEW-ZH.md`](docs/GRANT-OVERVIEW-ZH.md)
+**Keeper status:** https://xkub-keeper.onrender.com/prices
+
+> ⚠️ Testnet-stage software (KUB testnet, chainId 25925). Not audited — a third-party audit is the mainnet prerequisite. Do not use with real funds.
 
 ## XKub Perp
 

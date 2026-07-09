@@ -94,22 +94,29 @@ const faucetIps = new Map();      // ip -> array of claim timestamps (ms)
 const SEC_PER_BLOCK = 3;                 // KUB ~3s blocks
 const METRICS_LOOKBACK = Number(process.env.METRICS_LOOKBACK_BLOCKS ?? 400_000); // ~14 days
 const METRICS_CHUNK = Number(process.env.METRICS_CHUNK ?? 4_000);
-const metrics = { users: new Set(), trades: [], fromBlock: 0, lastBlock: 0, ready: false };
+const metrics = { users: new Set(), referred: new Set(), referrers: new Set(), rebateUsd: 0, trades: [], fromBlock: 0, lastBlock: 0, ready: false };
 
-async function scanMetrics(evMarket, evRouter, from, to) {
+async function scanMetrics(evMarket, evRouter, evReferral, from, to) {
   for (let start = from; start <= to; start += METRICS_CHUNK) {
     const end = Math.min(start + METRICS_CHUNK - 1, to);
     try {
-      const [inc, dec, dep] = await Promise.all([
+      const [inc, dec, dep, ref, reg, reb] = await Promise.all([
         evMarket.queryFilter(evMarket.filters.PositionIncreased(), start, end),
         evMarket.queryFilter(evMarket.filters.PositionDecreased(), start, end),
         evRouter.queryFilter(evRouter.filters.CollateralDeposited(), start, end),
+        evReferral.queryFilter(evReferral.filters.Referred(), start, end),
+        evReferral.queryFilter(evReferral.filters.CodeRegistered(), start, end),
+        evReferral.queryFilter(evReferral.filters.RebateAccrued(), start, end),
       ]);
       for (const e of dep) metrics.users.add(e.args.owner.toLowerCase());
       for (const e of [...inc, ...dec]) {
         metrics.users.add(e.args.owner.toLowerCase());
         metrics.trades.push({ a: e.args.owner.toLowerCase(), b: e.blockNumber, v: Number(ethers.formatEther(e.args.sizeDeltaUsd)) });
       }
+      // Referred trader is provably external (contract forbids self-referral).
+      for (const e of ref) { metrics.referred.add(e.args.trader.toLowerCase()); metrics.referrers.add(e.args.referrer.toLowerCase()); }
+      for (const e of reg) metrics.referrers.add(e.args.owner.toLowerCase());
+      for (const e of reb) metrics.rebateUsd += Number(ethers.formatEther(e.args.usd));
     } catch (err) {
       logError("metrics", `scan ${start}-${end}: ${err.shortMessage ?? err.message ?? err}`);
     }
@@ -123,6 +130,8 @@ function computeMetrics() {
   const inWin = (d) => metrics.trades.filter((t) => now - t.b <= win(d));
   const uniq = (arr) => new Set(arr.map((t) => t.a)).size;
   const sum = (arr) => Math.round(arr.reduce((s, t) => s + t.v, 0));
+  // Referred (external) users active in the last 7 days.
+  const referredWAW = new Set(inWin(7).map((t) => t.a).filter((a) => metrics.referred.has(a))).size;
   return {
     usersTotal: metrics.users.size,
     weeklyActiveWallets: uniq(inWin(7)),
@@ -131,27 +140,36 @@ function computeMetrics() {
     volumeTotalUsd: sum(metrics.trades),
     volume7dUsd: sum(inWin(7)),
     volume24hUsd: sum(inWin(1)),
+    referredUsers: metrics.referred.size,
+    referrers: metrics.referrers.size,
+    referredWeeklyActive: referredWAW,
+    rebatesAccruedUsd: Math.round(metrics.rebateUsd),
     indexedFromBlock: metrics.fromBlock,
     indexedToBlock: metrics.lastBlock,
     ready: metrics.ready,
   };
 }
 
-async function startMetricsIndexer(marketAddr, routerAddr) {
+async function startMetricsIndexer(marketAddr, routerAddr, referralAddr) {
   const evMarket = new ethers.Contract(marketAddr, [
     "event PositionIncreased(address indexed owner, bytes32 indexed marketId, bool isLong, uint256 collateralDeltaUsd, uint256 sizeDeltaUsd, uint256 price, uint256 feeUsd)",
     "event PositionDecreased(address indexed owner, bytes32 indexed marketId, bool isLong, uint256 sizeDeltaUsd, uint256 price, int256 pnlUsd, uint256 payoutUsd, uint256 feeUsd)",
   ], provider);
   const evRouter = new ethers.Contract(routerAddr, ["event CollateralDeposited(address indexed owner, uint256 tokens)"], provider);
+  const evReferral = new ethers.Contract(referralAddr, [
+    "event Referred(address indexed trader, bytes32 indexed code, address indexed referrer)",
+    "event CodeRegistered(bytes32 indexed code, address indexed owner)",
+    "event RebateAccrued(address indexed referrer, address indexed trader, uint256 usd)",
+  ], provider);
   const cur = await provider.getBlockNumber();
   metrics.fromBlock = Math.max(0, cur - METRICS_LOOKBACK);
-  await scanMetrics(evMarket, evRouter, metrics.fromBlock, cur);
+  await scanMetrics(evMarket, evRouter, evReferral, metrics.fromBlock, cur);
   metrics.ready = true;
   console.log(`[${now()}] metrics indexed: ${metrics.users.size} users, ${metrics.trades.length} trades`);
   setInterval(async () => {
     try {
       const c = await provider.getBlockNumber();
-      if (c > metrics.lastBlock) await scanMetrics(evMarket, evRouter, metrics.lastBlock + 1, c);
+      if (c > metrics.lastBlock) await scanMetrics(evMarket, evRouter, evReferral, metrics.lastBlock + 1, c);
     } catch { /* transient */ }
   }, 60_000);
 }
@@ -527,7 +545,7 @@ async function main() {
   setInterval(refreshGasPrice, 30_000);
 
   startRelayer(router, oracle, maxDeviationBps, kusdt); // bind port early
-  startMetricsIndexer(dep.addresses.XKubPerpMarket, dep.addresses.XKubPerpRouter)
+  startMetricsIndexer(dep.addresses.XKubPerpMarket, dep.addresses.XKubPerpRouter, dep.addresses.XKubReferral)
     .catch((e) => console.error(`[${now()}] metrics indexer failed: ${e.message ?? e}`));
 
   try { await initPricesToReal(oracle, maxDeviationBps); }

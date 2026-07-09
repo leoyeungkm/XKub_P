@@ -20,6 +20,7 @@ const METRICS_URL = RELAYER_URL ? RELAYER_URL.replace(/\/order\/?$/, "/metrics")
 type Metrics = {
   usersTotal: number; weeklyActiveWallets: number; dailyActiveWallets: number;
   tradesTotal: number; volumeTotalUsd: number; volume7dUsd: number; volume24hUsd: number;
+  referredUsers: number; referrers: number; referredWeeklyActive: number; rebatesAccruedUsd: number;
   indexedFromBlock: number; indexedToBlock: number; ready: boolean;
 };
 const bn = (x: unknown) => (x as bigint | undefined) ?? 0n;
@@ -125,9 +126,16 @@ export default function AdminPage() {
               <Stat k="Volume · 24h" v={`$${metrics.volume24hUsd.toLocaleString()}`} />
               <Stat k="Indexed status" v={metrics.ready ? "up to date" : "indexing…"} tone={metrics.ready ? undefined : "red"} />
             </div>
+            {/* Referral = provable external acquisition (contract forbids self-referral) */}
+            <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Stat k="Referred users (external)" v={String(metrics.referredUsers)} />
+              <Stat k="Referred · weekly active" v={String(metrics.referredWeeklyActive)} />
+              <Stat k="Referrers" v={String(metrics.referrers)} />
+              <Stat k="Rebates accrued" v={`$${metrics.rebatesAccruedUsd.toLocaleString()}`} />
+            </div>
             <p className="text-[11px] text-mutedDim">
-              Indexed from on-chain deposit/open/close events (blocks {metrics.indexedFromBlock.toLocaleString()}–{metrics.indexedToBlock.toLocaleString()}).
-              Volume counts both opens and closes. Includes all wallets — subtract team/test wallets for grant &quot;external&quot; reporting.
+              Indexed from on-chain deposit/open/close/referral events (blocks {metrics.indexedFromBlock.toLocaleString()}–{metrics.indexedToBlock.toLocaleString()}).
+              Volume counts opens + closes. <span className="text-muted">Referred users came through someone&apos;s link — the contract forbids self-referral, so they are provably external</span> and are the cleanest figure for grant &quot;external&quot; reporting.
             </p>
           </>
         ) : <div className="px-1 py-3 text-[12px] text-mutedDim">metrics unavailable (keeper indexing or offline)</div>}

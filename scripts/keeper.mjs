@@ -86,6 +86,76 @@ const IP_MAX_CLAIMS = Number(process.env.FAUCET_IP_MAX ?? 3);                   
 const faucetClaimed = new Set(); // per-address (in-memory; resets on redeploy)
 const faucetIps = new Map();      // ip -> array of claim timestamps (ms)
 
+// ── metrics indexer ────────────────────────────────────────────────────────
+// The contracts keep no global user/volume counters, so index the events:
+// CollateralDeposited (registrations), PositionIncreased/Decreased (trades +
+// volume). In-memory (re-scans on boot); testnet volumes are small. Exposed at
+// /metrics for the admin dashboard and grant reporting.
+const SEC_PER_BLOCK = 3;                 // KUB ~3s blocks
+const METRICS_LOOKBACK = Number(process.env.METRICS_LOOKBACK_BLOCKS ?? 400_000); // ~14 days
+const METRICS_CHUNK = Number(process.env.METRICS_CHUNK ?? 4_000);
+const metrics = { users: new Set(), trades: [], fromBlock: 0, lastBlock: 0, ready: false };
+
+async function scanMetrics(evMarket, evRouter, from, to) {
+  for (let start = from; start <= to; start += METRICS_CHUNK) {
+    const end = Math.min(start + METRICS_CHUNK - 1, to);
+    try {
+      const [inc, dec, dep] = await Promise.all([
+        evMarket.queryFilter(evMarket.filters.PositionIncreased(), start, end),
+        evMarket.queryFilter(evMarket.filters.PositionDecreased(), start, end),
+        evRouter.queryFilter(evRouter.filters.CollateralDeposited(), start, end),
+      ]);
+      for (const e of dep) metrics.users.add(e.args.owner.toLowerCase());
+      for (const e of [...inc, ...dec]) {
+        metrics.users.add(e.args.owner.toLowerCase());
+        metrics.trades.push({ a: e.args.owner.toLowerCase(), b: e.blockNumber, v: Number(ethers.formatEther(e.args.sizeDeltaUsd)) });
+      }
+    } catch (err) {
+      logError("metrics", `scan ${start}-${end}: ${err.shortMessage ?? err.message ?? err}`);
+    }
+    metrics.lastBlock = end;
+  }
+}
+
+function computeMetrics() {
+  const now = metrics.lastBlock;
+  const win = (days) => (days * 86400) / SEC_PER_BLOCK;
+  const inWin = (d) => metrics.trades.filter((t) => now - t.b <= win(d));
+  const uniq = (arr) => new Set(arr.map((t) => t.a)).size;
+  const sum = (arr) => Math.round(arr.reduce((s, t) => s + t.v, 0));
+  return {
+    usersTotal: metrics.users.size,
+    weeklyActiveWallets: uniq(inWin(7)),
+    dailyActiveWallets: uniq(inWin(1)),
+    tradesTotal: metrics.trades.length,
+    volumeTotalUsd: sum(metrics.trades),
+    volume7dUsd: sum(inWin(7)),
+    volume24hUsd: sum(inWin(1)),
+    indexedFromBlock: metrics.fromBlock,
+    indexedToBlock: metrics.lastBlock,
+    ready: metrics.ready,
+  };
+}
+
+async function startMetricsIndexer(marketAddr, routerAddr) {
+  const evMarket = new ethers.Contract(marketAddr, [
+    "event PositionIncreased(address indexed owner, bytes32 indexed marketId, bool isLong, uint256 collateralDeltaUsd, uint256 sizeDeltaUsd, uint256 price, uint256 feeUsd)",
+    "event PositionDecreased(address indexed owner, bytes32 indexed marketId, bool isLong, uint256 sizeDeltaUsd, uint256 price, int256 pnlUsd, uint256 payoutUsd, uint256 feeUsd)",
+  ], provider);
+  const evRouter = new ethers.Contract(routerAddr, ["event CollateralDeposited(address indexed owner, uint256 tokens)"], provider);
+  const cur = await provider.getBlockNumber();
+  metrics.fromBlock = Math.max(0, cur - METRICS_LOOKBACK);
+  await scanMetrics(evMarket, evRouter, metrics.fromBlock, cur);
+  metrics.ready = true;
+  console.log(`[${now()}] metrics indexed: ${metrics.users.size} users, ${metrics.trades.length} trades`);
+  setInterval(async () => {
+    try {
+      const c = await provider.getBlockNumber();
+      if (c > metrics.lastBlock) await scanMetrics(evMarket, evRouter, metrics.lastBlock + 1, c);
+    } catch { /* transient */ }
+  }, 60_000);
+}
+
 // Ring buffer of recent relay/faucet errors, exposed read-only at /errors so
 // user-reported failures can be diagnosed without dashboard access. Testnet-only.
 const recentErrors = [];
@@ -301,6 +371,9 @@ function startRelayer(router, oracle, maxDeviationBps, kusdt) {
     if (req.method === "GET" && req.url?.startsWith("/errors")) {
       res.writeHead(200, { "content-type": "application/json" }); return res.end(JSON.stringify(recentErrors));
     }
+    if (req.method === "GET" && req.url?.startsWith("/metrics")) {
+      res.writeHead(200, { "content-type": "application/json" }); return res.end(JSON.stringify(computeMetrics()));
+    }
     // Ops status: role-wallet addresses + live KUB/KUSDT balances (for /admin).
     if (req.method === "GET" && req.url?.startsWith("/status")) {
       try {
@@ -454,6 +527,8 @@ async function main() {
   setInterval(refreshGasPrice, 30_000);
 
   startRelayer(router, oracle, maxDeviationBps, kusdt); // bind port early
+  startMetricsIndexer(dep.addresses.XKubPerpMarket, dep.addresses.XKubPerpRouter)
+    .catch((e) => console.error(`[${now()}] metrics indexer failed: ${e.message ?? e}`));
 
   try { await initPricesToReal(oracle, maxDeviationBps); }
   catch (e) { console.error(`[${now()}] initPrices skipped: ${e.shortMessage ?? e.message ?? e}`); }

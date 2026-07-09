@@ -15,6 +15,13 @@ import { useKubWrite } from "@/lib/kubWrite";
 
 const STATUS_URL = RELAYER_URL ? RELAYER_URL.replace(/\/order\/?$/, "/status") : "";
 const ERRORS_URL = RELAYER_URL ? RELAYER_URL.replace(/\/order\/?$/, "/errors") : "";
+const METRICS_URL = RELAYER_URL ? RELAYER_URL.replace(/\/order\/?$/, "/metrics") : "";
+
+type Metrics = {
+  usersTotal: number; weeklyActiveWallets: number; dailyActiveWallets: number;
+  tradesTotal: number; volumeTotalUsd: number; volume7dUsd: number; volume24hUsd: number;
+  indexedFromBlock: number; indexedToBlock: number; ready: boolean;
+};
 const bn = (x: unknown) => (x as bigint | undefined) ?? 0n;
 
 export default function AdminPage() {
@@ -65,14 +72,16 @@ export default function AdminPage() {
   const adminAddr = r(0) as string | undefined;
   const isAdmin = !!address && !!adminAddr && address.toLowerCase() === adminAddr.toLowerCase();
 
-  // ── keeper ops status ───────────────────────────────────────────────────────
+  // ── keeper ops status + traction metrics ────────────────────────────────────
   const [status, setStatus] = useState<KeeperStatus | null>(null);
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
   useEffect(() => {
-    if (!STATUS_URL) return;
-    const load = () => fetch(STATUS_URL, { signal: AbortSignal.timeout(15000) })
-      .then((x) => x.json()).then(setStatus).catch(() => {});
+    const load = () => {
+      if (STATUS_URL) fetch(STATUS_URL, { signal: AbortSignal.timeout(15000) }).then((x) => x.json()).then(setStatus).catch(() => {});
+      if (METRICS_URL) fetch(METRICS_URL, { signal: AbortSignal.timeout(15000) }).then((x) => x.json()).then(setMetrics).catch(() => {});
+    };
     load();
-    const id = setInterval(load, 15000);
+    const id = setInterval(load, 20000);
     return () => clearInterval(id);
   }, []);
 
@@ -101,6 +110,28 @@ export default function AdminPage() {
           ? <span className="rounded bg-redDim px-2 py-0.5 text-[11px] font-medium text-red">TRADING PAUSED</span>
           : <span className="rounded bg-panel2 px-2 py-0.5 text-[11px] text-muted">live</span>}
       </header>
+
+      {/* ── TRACTION (on-chain, indexed) ── */}
+      <Section title="Users & traction">
+        {metrics ? (
+          <>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Stat k="Total users" v={String(metrics.usersTotal)} />
+              <Stat k="Weekly active" v={String(metrics.weeklyActiveWallets)} />
+              <Stat k="Daily active" v={String(metrics.dailyActiveWallets)} />
+              <Stat k="Total trades" v={String(metrics.tradesTotal)} />
+              <Stat k="Volume · total" v={`$${metrics.volumeTotalUsd.toLocaleString()}`} />
+              <Stat k="Volume · 7d" v={`$${metrics.volume7dUsd.toLocaleString()}`} />
+              <Stat k="Volume · 24h" v={`$${metrics.volume24hUsd.toLocaleString()}`} />
+              <Stat k="Indexed status" v={metrics.ready ? "up to date" : "indexing…"} tone={metrics.ready ? undefined : "red"} />
+            </div>
+            <p className="text-[11px] text-mutedDim">
+              Indexed from on-chain deposit/open/close events (blocks {metrics.indexedFromBlock.toLocaleString()}–{metrics.indexedToBlock.toLocaleString()}).
+              Volume counts both opens and closes. Includes all wallets — subtract team/test wallets for grant &quot;external&quot; reporting.
+            </p>
+          </>
+        ) : <div className="px-1 py-3 text-[12px] text-mutedDim">metrics unavailable (keeper indexing or offline)</div>}
+      </Section>
 
       {/* ── OPS (read-only) ── */}
       <Section title="Operations">

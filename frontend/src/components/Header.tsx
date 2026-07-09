@@ -126,13 +126,14 @@ export default function Header() {
       )}
     </header>
 
-    {/* mobile bottom tab bar */}
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+    {/* mobile bottom tab bar — solid bg (no see-through on overscroll), height
+        fixed at 3rem + the device safe-area inset */}
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-panel pb-[env(safe-area-inset-bottom)] md:hidden">
       {navItems.map((n) => {
         const active = pathname === n.href;
         return (
           <Link key={n.href} href={n.href}
-            className={`flex-1 py-2.5 text-center text-[12px] font-medium transition-colors ${active ? "text-accent" : "text-muted"}`}>
+            className={`flex h-12 flex-1 items-center justify-center text-[12px] font-medium transition-colors ${active ? "text-accent" : "text-muted"}`}>
             {n.label}
           </Link>
         );

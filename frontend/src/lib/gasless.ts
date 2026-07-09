@@ -67,27 +67,40 @@ export async function submitGaslessOrder(params: {
     message,
   });
 
-  const res = await fetch(RELAYER_URL, {
-    method: "POST",
-    signal: AbortSignal.timeout(45000), // relayer waits ≤40s for the receipt
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      order: {
-        owner: message.owner, marketId: message.marketId, isLong: message.isLong, isIncrease: message.isIncrease,
-        collateralTokens: message.collateralTokens.toString(), sizeDeltaUsd: message.sizeDeltaUsd.toString(),
-        acceptablePrice: message.acceptablePrice.toString(), nonce: message.nonce.toString(), deadline: message.deadline.toString(),
-      },
-      sig,
-    }),
-  });
-  // 409 "duplicate" = this owner-nonce is already being processed — i.e. our
-  // earlier attempt WAS accepted (the client just timed out waiting). Treat it
-  // as submitted; position polling confirms the outcome.
-  if (res.status === 409) return "duplicate-in-flight";
-  if (!res.ok) {
-    const j = await res.json().catch(() => ({}));
-    throw new Error(j.error ?? `relayer ${res.status}`);
+  const post = async (): Promise<string> => {
+    const res = await fetch(RELAYER_URL, {
+      method: "POST",
+      signal: AbortSignal.timeout(45000), // relayer waits ≤40s for the receipt
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        order: {
+          owner: message.owner, marketId: message.marketId, isLong: message.isLong, isIncrease: message.isIncrease,
+          collateralTokens: message.collateralTokens.toString(), sizeDeltaUsd: message.sizeDeltaUsd.toString(),
+          acceptablePrice: message.acceptablePrice.toString(), nonce: message.nonce.toString(), deadline: message.deadline.toString(),
+        },
+        sig,
+      }),
+    });
+    // 409 "duplicate" = this owner-nonce is already in flight → it WAS accepted.
+    if (res.status === 409) return "duplicate-in-flight";
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      throw new Error(j.error ?? `relayer ${res.status}`);
+    }
+    return (await res.json()).txHash as string;
+  };
+
+  // Retry-once with a nonce guard: if the first attempt errored client-side but
+  // the order actually executed (nonce advanced), DON'T resend — resending the
+  // same nonce is what produces the noisy 409s. Only resend if truly not filled.
+  try {
+    return await post();
+  } catch (e) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const cur = await params.client.readContract({
+      address: ADDR.router, abi: routerAbi, functionName: "orderNonce", args: [params.owner],
+    }) as bigint;
+    if (cur > nonce) return "filled"; // already executed — no resend, no 409
+    return await post(); // genuinely not filled — safe to retry
   }
-  const j = await res.json();
-  return j.txHash as string;
 }

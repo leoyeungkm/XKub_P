@@ -71,12 +71,7 @@ export default function PositionsTable() {
           owner: address, symbol, isLong, isIncrease: false,
           collateralTokens: 0n, sizeDeltaUsd: sizeUsd, acceptablePrice: acceptable, client,
         });
-        try {
-          await gasless();
-        } catch {
-          await new Promise((r) => setTimeout(r, 1500));
-          await gasless();
-        }
+        await gasless(); // submitGaslessOrder retries once internally with a nonce guard
         toast.success(t("toast.closeSubmitted"));
         refreshPositions();
         return;

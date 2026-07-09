@@ -70,12 +70,7 @@ export default function ActivityPanel() {
           owner: address, symbol: p.symbol, isLong: p.isLong, isIncrease: false,
           collateralTokens: 0n, sizeDeltaUsd: p.sizeUsd, acceptablePrice: acceptable, client,
         });
-        try {
-          await gasless();
-        } catch {
-          await new Promise((r) => setTimeout(r, 1500)); // let nonce/price settle
-          await gasless(); // throws to the outer catch if it still fails
-        }
+        await gasless(); // submitGaslessOrder retries once internally with a nonce guard
         toast.success(t("toast.closeSubmitted"));
         refreshPositions();
         return;

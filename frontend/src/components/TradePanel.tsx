@@ -172,8 +172,7 @@ export default function TradePanel({ symbol }: { symbol: string }) {
           collateralTokens, sizeDeltaUsd: sizeUsd18, acceptablePrice: acceptable, client,
         });
         try {
-          try { await gasless(); }
-          catch { await new Promise((r) => setTimeout(r, 1500)); await gasless(); }
+          await gasless(); // submitGaslessOrder retries once internally with a nonce guard
           toast.success(t("toast.orderSubmitted"));
           setAmount("");
           oneClick.refetch();

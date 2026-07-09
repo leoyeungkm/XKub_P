@@ -14,6 +14,7 @@ import { errMsg, fmtNum } from "@/lib/format";
 import { ensureAgentAccount, useOneClick } from "@/lib/oneclick";
 import { useFaucet } from "@/lib/faucet";
 import { openFaucet } from "@/components/FaucetModal";
+import { PENDING_REF_KEY } from "@/components/RefCapture";
 import { useT } from "@/lib/i18n";
 
 const seenKey = (o: string) => `xkub.onboard.${o.toLowerCase()}`;
@@ -152,6 +153,29 @@ export default function OnboardingModal() {
         gas: 450_000n, chainId: chain.id, // explicit limit — stops MetaMask padding it and over-quoting the cost
       });
       await client.waitForTransactionReceipt({ hash: h, timeout: 90_000 });
+
+      // Auto-bind the referral code the user arrived with (?ref=CODE). setupAccount
+      // registers the user's OWN code; this binds them TO their referrer so they
+      // get the discount and the referrer earns rebates. Best-effort, one extra tx.
+      if (ADDR.referral) {
+        const pending = (localStorage.getItem(PENDING_REF_KEY) ?? "").toUpperCase().replace(/[^A-Z0-9_]/g, "").slice(0, 31);
+        if (pending.length >= 3) {
+          try {
+            const codeOwner = await client.readContract({
+              address: ADDR.referral, abi: referralAbi, functionName: "codeOwner", args: [b32(pending)],
+            }) as `0x${string}`;
+            if (codeOwner !== "0x0000000000000000000000000000000000000000" && codeOwner.toLowerCase() !== address.toLowerCase()) {
+              const rh = await writeContractAsync({
+                address: ADDR.referral, abi: referralAbi, functionName: "setReferrer", args: [b32(pending)],
+                ...fees, chainId: chain.id, gas: 120_000n,
+              });
+              await client.waitForTransactionReceipt({ hash: rh, timeout: 90_000 });
+              localStorage.removeItem(PENDING_REF_KEY);
+            }
+          } catch { /* referral binding is optional — never block onboarding */ }
+        }
+      }
+
       toast.success(t("onb.setupDone"));
       oc.refetch();
       dismiss();

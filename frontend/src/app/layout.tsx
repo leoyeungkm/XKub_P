@@ -55,8 +55,8 @@ export default function RootLayout({
             <OnboardingModal />
             <FaucetModal />
             <RefCapture />
-            {/* clears the fixed mobile bottom nav (its 3rem height + safe-area inset) */}
-            <div className="h-[calc(3rem_+_env(safe-area-inset-bottom))] md:hidden" />
+            {/* clears the fixed mobile bottom nav (its 2.25rem height + safe-area inset) */}
+            <div className="h-[calc(2.25rem_+_env(safe-area-inset-bottom))] md:hidden" />
           </LanguageProvider>
         </Providers>
       </body>

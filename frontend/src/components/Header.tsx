@@ -133,7 +133,7 @@ export default function Header() {
         const active = pathname === n.href;
         return (
           <Link key={n.href} href={n.href}
-            className={`flex h-12 flex-1 items-center justify-center text-[12px] font-medium transition-colors ${active ? "text-accent" : "text-muted"}`}>
+            className={`flex h-9 flex-1 items-center justify-center text-[12px] font-medium transition-colors ${active ? "text-accent" : "text-muted"}`}>
             {n.label}
           </Link>
         );
